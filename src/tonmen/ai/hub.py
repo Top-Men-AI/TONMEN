@@ -2,13 +2,19 @@ from __future__ import annotations
 
 import json
 import os
+import queue
+import re
 import shutil
 import subprocess
 import tempfile
+import threading
 from dataclasses import dataclass, field
 from time import monotonic
 from typing import Any, Mapping
 from urllib.request import Request, urlopen
+
+_URL_RE = re.compile(r'https?://\S{12,}')
+_CODE_RE = re.compile(r'\b([A-Z0-9]{6,12})\b')
 
 
 _ALLOWED_ACTIONS = {
@@ -276,11 +282,57 @@ class ProviderHub:
             raise ValueError(f"{spec.executable} is not installed")
         if not spec.login_command:
             raise ValueError("provider has no login command")
-        process = subprocess.Popen(list(spec.login_command), shell=False)  # noqa: S603 - fixed official CLI argv
+
+        # Launch the CLI and capture its initial output to extract auth URL / one-time code.
+        process = subprocess.Popen(  # noqa: S603
+            list(spec.login_command),
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True,
+            shell=False,
+        )
+
+        captured: queue.Queue[str] = queue.Queue()
+
+        def _reader() -> None:
+            assert process.stdout is not None
+            try:
+                for line in process.stdout:
+                    captured.put(line)
+            except OSError:
+                pass
+
+        threading.Thread(target=_reader, daemon=True).start()
+
+        # Collect output for up to 6 seconds, stopping early once we have URL + code.
+        deadline = monotonic() + 6.0
+        lines: list[str] = []
+        login_url: str | None = None
+        one_time_code: str | None = None
+        while monotonic() < deadline:
+            try:
+                line = captured.get(timeout=0.25)
+                lines.append(line)
+                if login_url is None:
+                    m = _URL_RE.search(line)
+                    if m:
+                        login_url = m.group(0).rstrip('"\'.,')
+                if one_time_code is None:
+                    m = _CODE_RE.search(line)
+                    if m:
+                        one_time_code = m.group(1)
+                if login_url and one_time_code:
+                    break
+            except queue.Empty:
+                # If we already have a URL stop waiting early
+                if login_url:
+                    break
+
         return {
             "provider": provider_id,
             "pid": process.pid,
-            "command": list(spec.login_command),
+            "login_url": login_url,
+            "one_time_code": one_time_code,
             "note": "Authentication is handled by the official CLI. TONMEN does not read or persist its credentials.",
         }
 

@@ -5,9 +5,9 @@
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <meta name="tonmen-csrf" content="__TONMEN_CSRF__">
   <title>AI 配置 | TONMEN</title>
-  <link rel="stylesheet" href="/assets/app.css?v=provider-hub-2">
-  <link rel="stylesheet" href="/assets/viewport.css?v=provider-hub-2">
-  <link rel="stylesheet" href="/assets/provider-hub-page.css?v=provider-hub-2">
+  <link rel="stylesheet" href="/assets/app.css?v=provider-hub-3">
+  <link rel="stylesheet" href="/assets/viewport.css?v=provider-hub-3">
+  <link rel="stylesheet" href="/assets/provider-hub-page.css?v=provider-hub-3">
 </head>
 <body>
   <div class="console-frame provider-console">
@@ -17,7 +17,7 @@
         <div class="brand-name"><strong>雲頂天宮</strong><i></i><b>TONMEN</b></div>
         <div class="brand-tagline">AI 配置</div>
       </div>
-      <div class="header-slogan"><span>连接模型，开启 AI</span></div>
+      <div class="header-slogan"><span>连接模型，开启 AI 智能决策</span></div>
       <div class="hub-refresh-wrap"><span id="hub-updated">—</span><button class="ghost" id="hub-refresh" type="button">↻ 刷新</button></div>
     </header>
 
@@ -43,36 +43,159 @@
 
       <main class="main-stage provider-stage">
         <section class="provider-page">
-          <div class="provider-page-head"><div><h1>AI 配置</h1><p>配置模型账号、AI 主控和子代理。</p></div></div>
+          <div class="provider-page-head">
+            <div>
+              <h1><span class="ph-icon">⚙</span> AI 配置</h1>
+              <p>配置模型账号、AI 主控和多智能体协同池。支持官方 CLI 一键登录与 API Key 凭据管理。</p>
+            </div>
+          </div>
+          
           <div id="hub-alert" class="hub-alert hidden"></div>
+          
+          <!-- Summary Metrics -->
           <section id="hub-summary" class="hub-summary"></section>
 
-          <div class="hub-layout">
-            <section class="hub-panel lead-panel">
-              <div class="hub-panel-head"><div><h2>AI 主控</h2><small>当前状态和最近判断</small></div><span id="lead-state" class="module-badge blue">读取中</span></div>
-              <div id="lead-body" class="hub-panel-body"><div class="hub-empty">正在读取…</div></div>
-            </section>
+          <!-- Lead AI Config Panel -->
+          <section class="lead-config-panel">
+            <div class="lead-config-head">
+              <div>
+                <h2>AI 主控</h2>
+                <small>配置顶级规划模型，指挥任务拆解、漏洞研判与自适应循环。</small>
+              </div>
+              <div class="lead-toggle">
+                <input type="checkbox" id="lead-active-toggle">
+                <label for="lead-active-toggle">开启 AI 主控</label>
+              </div>
+            </div>
+            <div class="lead-fields">
+              <div class="lead-field">
+                <label for="lead-provider-select">供应商</label>
+                <select id="lead-provider-select">
+                  <option value="openai">OpenAI API</option>
+                  <option value="deepseek">DeepSeek API</option>
+                  <option value="mistral">Mistral API</option>
+                  <option value="codex">ChatGPT / Codex (CLI)</option>
+                  <option value="google">Google Antigravity (CLI)</option>
+                  <option value="grok">Grok / xAI (CLI)</option>
+                </select>
+              </div>
+              <div class="lead-field">
+                <label for="lead-model-input">主控模型名称</label>
+                <input type="text" id="lead-model-input" placeholder="例如: gpt-4o, deepseek-chat">
+              </div>
+              <div class="lead-field">
+                <label>运行状态</label>
+                <div class="lead-status-display">
+                  <span class="lead-status-dot" id="lead-status-dot"></span>
+                  <span id="lead-status-text">检测中…</span>
+                </div>
+              </div>
+            </div>
+            <div class="lead-save-btn">
+              <button type="button" id="lead-save-btn">💾 保存主控配置</button>
+            </div>
+          </section>
 
-            <section class="hub-panel pool-panel">
-              <div class="hub-panel-head"><div><h2>模型账号</h2><small>连接状态</small></div><span id="pool-state" class="module-badge blue">—</span></div>
-              <div id="provider-grid" class="provider-grid"><div class="hub-empty">正在读取…</div></div>
-            </section>
-
-            <section class="hub-panel distribution-panel">
-              <div class="hub-panel-head"><div><h2>调用统计</h2><small>子代理使用情况</small></div><span id="token-total" class="module-badge purple">0</span></div>
-              <div id="distribution-list" class="distribution-list"><div class="hub-empty">暂无调用记录。</div></div>
-            </section>
-
-            <section class="hub-panel routing-panel">
-              <div class="hub-panel-head"><div><h2>高级路由</h2><small>模型分配规则</small></div></div>
-              <div id="routing-body" class="hub-panel-body"></div>
-            </section>
-          </div>
+          <!-- Providers Section -->
+          <section class="providers-section">
+            <div class="providers-section-head">
+              <h2>模型账号</h2>
+              <button type="button" class="new-model-btn" id="open-new-model-btn">＋ 新建模型配置</button>
+            </div>
+            <div id="provider-grid" class="provider-grid">
+              <div class="hub-empty">正在加载模型账号…</div>
+            </div>
+            <div class="hub-footer-note">
+              <span>🔒 凭据安全：API Key 保存在服务器受保护的隔离密钥库中，不会暴露到浏览器或任务报告中。所有 AI 仅负责规划与建议，无自主审批或破坏性执行权限。</span>
+            </div>
+          </section>
         </section>
       </main>
     </div>
   </div>
+
+  <!-- New Model Dialog Modal -->
+  <div id="model-dialog-overlay" class="modal-overlay hidden" style="position:fixed;inset:0;background:rgba(2,6,10,0.82);backdrop-filter:blur(6px);z-index:9999;display:flex;align-items:center;justify-content:center;">
+    <div class="model-dialog-card">
+      <div class="model-dialog-head">
+        <h2>新建模型配置</h2>
+        <button class="icon-btn" id="close-model-dialog" type="button" aria-label="关闭">×</button>
+      </div>
+      <div class="model-dialog-sub">添加自定义 AI 供应商、反向代理或本地兼容 OpenAI 协议的模型端点。</div>
+
+      <form id="new-model-form">
+        <div class="model-form-grid">
+          <div class="model-field">
+            <label for="m-id">供应商标识 (ID)</label>
+            <input type="text" id="m-id" placeholder="例如: local-ollama, azure-openai" required pattern="[a-zA-Z0-9_\-]+">
+          </div>
+          <div class="model-field">
+            <label for="m-auth-mode">认证方式</label>
+            <select id="m-auth-mode">
+              <option value="api_key">API Key</option>
+              <option value="browser_login">官方 CLI 登录</option>
+              <option value="none">无需认证 (Local / vLLM / Ollama)</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="model-form-full">
+          <div class="model-field">
+            <label for="m-label">显示名称</label>
+            <input type="text" id="m-label" placeholder="例如: Local Ollama, Custom OpenAI Proxy" required>
+          </div>
+        </div>
+
+        <div class="model-form-full">
+          <div class="model-field">
+            <label for="m-base-url">API Base URL</label>
+            <input type="url" id="m-base-url" placeholder="https://api.openai.com/v1 或 http://localhost:11434/v1">
+            <span class="model-field-note">兼容 OpenAI Chat Completions 协议的 HTTP 端点。</span>
+          </div>
+        </div>
+
+        <div class="model-form-cols3">
+          <div class="model-field">
+            <label for="m-default-model">默认模型</label>
+            <input type="text" id="m-default-model" placeholder="例如: qwen2.5:72b, gpt-4o">
+          </div>
+          <div class="model-field">
+            <label for="m-key-env">环境变量名</label>
+            <input type="text" id="m-key-env" placeholder="例如: CUSTOM_API_KEY">
+          </div>
+          <div class="model-field">
+            <label for="m-cost-weight">成本权重</label>
+            <input type="number" id="m-cost-weight" value="1.0" step="0.1" min="0.1" max="10.0">
+          </div>
+        </div>
+
+        <div class="model-form-full" id="m-key-row">
+          <div class="model-field">
+            <label for="m-api-key">API Key</label>
+            <input type="password" id="m-api-key" placeholder="粘贴密钥（将安全保存）">
+          </div>
+        </div>
+
+        <div class="model-toggle-row">
+          <div class="model-toggle-info">
+            <strong>加入 Council Provider 池</strong>
+            <span>开启后，多智能体评议与自适应调度器可调用此模型。</span>
+          </div>
+          <label class="toggle-switch">
+            <input type="checkbox" id="m-pool-enable" checked>
+            <span class="toggle-slider"></span>
+          </label>
+        </div>
+
+        <div class="model-dialog-actions">
+          <button type="button" class="model-test-btn" id="m-test-btn">⚡ 测试端点连接</button>
+          <button type="submit" class="model-create-btn primary-cta" id="m-submit-btn">✓ 保存并启用配置</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
   <div id="toast" class="toast" role="status" aria-live="polite"></div>
-  <script src="/assets/provider-hub-page.js?v=provider-hub-2"></script>
+  <script src="/assets/provider-hub-page.js?v=provider-hub-3"></script>
 </body>
 </html>

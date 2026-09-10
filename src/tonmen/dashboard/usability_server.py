@@ -246,12 +246,7 @@ class UsabilityDashboardHandler(MissionPreflightDashboardHandler):
         return text.encode("utf-8")
 
     def _provider_index(self) -> bytes:
-        text = super()._provider_index().decode("utf-8")
-        if "/assets/provider-easy-setup.css" not in text:
-            text = text.replace("</head>", '  <link rel="stylesheet" href="/assets/provider-easy-setup.css?v=easy-1">\n</head>')
-        if "/assets/provider-easy-setup.js" not in text:
-            text = text.replace("</body>", '  <script src="/assets/provider-easy-setup.js?v=easy-1"></script>\n</body>')
-        return text.encode("utf-8")
+        return super()._provider_index()
 
     def do_GET(self) -> None:
         path = urlparse(self.path).path.rstrip("/") or "/"

@@ -143,11 +143,15 @@ class DashboardState(BaseDashboardState):
             hub = ProviderHub()
             spec = hub.spec(provider_id)
             launched = hub.launch_login(provider_id)
+            login_url = launched.get("login_url")
+            one_time_code = launched.get("one_time_code")
             self._provider_probes[provider_id] = {
                 "provider": provider_id,
                 "ready": False,
-                "detail": "login flow launched; finish authentication in the official browser/CLI, then check connection",
+                "detail": "正在启动官方登录流程；请在浏览器完成授权，然后点击检查连接。",
                 "auth_mode": spec.auth_mode,
+                "login_url": login_url,
+                "one_time_code": one_time_code,
             }
             self.events.publish("ai.provider_login_started", provider=provider_id, auth_mode=spec.auth_mode)
             return {
@@ -155,6 +159,8 @@ class DashboardState(BaseDashboardState):
                 "label": spec.label,
                 "pid": launched.get("pid"),
                 "auth_mode": spec.auth_mode,
+                "login_url": login_url,
+                "one_time_code": one_time_code,
                 "note": "Authentication is handled by the official CLI; TONMEN does not read or persist its credentials.",
             }
 
