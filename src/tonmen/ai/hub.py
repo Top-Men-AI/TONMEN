@@ -112,13 +112,15 @@ _SPECS = {
     ),
     "google": ProviderSpec(
         id="google",
-        label="Google Antigravity",
-        transport="antigravity_cli",
-        auth_mode="browser_login",
+        label="Google Gemini / Antigravity",
+        transport="chat_completions",
+        auth_mode="api_key",
         strength=3,
-        cost_weight=1.0,
+        cost_weight=0.5,
+        api_key_env="GEMINI_API_KEY",
+        base_url="https://generativelanguage.googleapis.com/v1beta/openai",
+        default_model="gemini-2.5-flash",
         executable="agy",
-        default_model=None,
         login_command=("agy",),
         probe_command=("agy", "models"),
     ),
@@ -253,11 +255,26 @@ class ProviderHub:
     def probe(self, provider_id: str, *, timeout: int = 8) -> dict[str, Any]:
         spec = self.spec(provider_id)
         if spec.auth_mode == "api_key":
-            return {"ready": self._key_configured(spec), "detail": f"{spec.api_key_env} configured" if self._key_configured(spec) else f"set {spec.api_key_env}"}
+            if self._key_configured(spec):
+                return {"ready": True, "detail": f"{spec.api_key_env} 已配置"}
+            if spec.probe_command and self._installed(spec):
+                try:
+                    result = subprocess.run(
+                        list(spec.probe_command),
+                        capture_output=True,
+                        text=True,
+                        timeout=timeout,
+                        check=False,
+                    )
+                    if result.returncode == 0:
+                        return {"ready": True, "detail": "官方 CLI 已完成认证 / 可用"}
+                except (OSError, subprocess.TimeoutExpired):
+                    pass
+            return {"ready": False, "detail": f"未配置 {spec.api_key_env}，请在上方输入并保存"}
         if not self._installed(spec):
-            return {"ready": False, "detail": f"{spec.executable} is not installed"}
+            return {"ready": False, "detail": f"{spec.executable} 未安装"}
         if not spec.probe_command:
-            return {"ready": True, "detail": "official CLI installed; authentication state not probed"}
+            return {"ready": True, "detail": "官方 CLI 已安装；未提供状态探测命令"}
         try:
             result = subprocess.run(
                 list(spec.probe_command),
@@ -268,10 +285,19 @@ class ProviderHub:
             )
         except (OSError, subprocess.TimeoutExpired) as exc:
             return {"ready": False, "detail": str(exc)[:240]}
-        detail = (result.stderr or result.stdout or "").strip().splitlines()
+        if result.returncode == 0:
+            return {"ready": True, "detail": "官方 CLI 已完成认证 / 可用"}
+        output_text = (result.stderr or result.stdout or "").strip()
+        detail_msg = "官方 CLI 尚未登录认证；请完成登录后再检查"
+        if "sign in" in output_text.lower() or "login" in output_text.lower():
+            detail_msg = "官方 CLI 尚未登录认证；请使用一键登录或在终端完成认证"
+        elif output_text:
+            lines = [line.strip() for line in output_text.splitlines() if line.strip()]
+            if lines:
+                detail_msg = lines[-1][:180]
         return {
-            "ready": result.returncode == 0,
-            "detail": (detail[-1] if detail else f"exit {result.returncode}")[:240],
+            "ready": False,
+            "detail": detail_msg,
         }
 
     def launch_login(self, provider_id: str) -> dict[str, Any]:

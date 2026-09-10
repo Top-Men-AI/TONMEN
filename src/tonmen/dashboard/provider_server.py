@@ -122,17 +122,19 @@ class DashboardState(BaseDashboardState):
             spec = hub.spec(provider_id)
             raw = hub.probe(provider_id)
             ready = bool(raw.get("ready"))
-            if spec.auth_mode == "browser_login":
-                installed = hub._installed(spec)
-                detail = (
-                    "official CLI reports authenticated / ready"
-                    if ready
-                    else f"{spec.executable} is not installed"
-                    if not installed
-                    else "official CLI did not confirm an authenticated session"
-                )
-            else:
-                detail = f"{spec.api_key_env} configured" if ready else f"set {spec.api_key_env} on the TONMEN server"
+            detail = raw.get("detail")
+            if not detail:
+                if spec.auth_mode == "browser_login":
+                    installed = hub._installed(spec)
+                    detail = (
+                        "官方 CLI 已完成认证 / 就绪"
+                        if ready
+                        else f"{spec.executable} 未安装"
+                        if not installed
+                        else "官方 CLI 尚未登录认证"
+                    )
+                else:
+                    detail = f"{spec.api_key_env} 已配置" if ready else f"未配置 {spec.api_key_env}"
             result = {"provider": provider_id, "ready": ready, "detail": detail, "auth_mode": spec.auth_mode}
             self._provider_probes[provider_id] = result
             self.events.publish("ai.provider_probed", provider=provider_id, ready=ready, auth_mode=spec.auth_mode)

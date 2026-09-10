@@ -29,7 +29,7 @@ _USABILITY_ASSETS = {
     "provider-easy-setup.js": "text/javascript; charset=utf-8",
 }
 _AI_SETTING_ENVS = {"TONMEN_AI_PROVIDER", "TONMEN_AI_MODEL", "TONMEN_AI_POOL"}
-_API_KEY_ENVS = {"OPENAI_API_KEY", "DEEPSEEK_API_KEY", "MISTRAL_API_KEY"}
+_API_KEY_ENVS = {"OPENAI_API_KEY", "DEEPSEEK_API_KEY", "MISTRAL_API_KEY", "GEMINI_API_KEY"}
 
 
 def _friendly_error(message: str) -> tuple[str, str | None]:
