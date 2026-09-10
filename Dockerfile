@@ -23,12 +23,12 @@ RUN apt-get update \
     && curl --fail --location --retry 3 \
          "https://github.com/projectdiscovery/httpx/releases/download/v${HTTPX_VERSION}/httpx_${HTTPX_VERSION}_linux_${asset_arch}.zip" \
          -o /tmp/httpx.zip \
-    && unzip -q /tmp/httpx.zip -d /usr/local/bin \
+    && unzip -q -o /tmp/httpx.zip -d /usr/local/bin \
     && chmod 0755 /usr/local/bin/httpx \
     && curl --fail --location --retry 3 \
          "https://github.com/projectdiscovery/nuclei/releases/download/v${NUCLEI_VERSION}/nuclei_${NUCLEI_VERSION}_linux_${asset_arch}.zip" \
          -o /tmp/nuclei.zip \
-    && unzip -q /tmp/nuclei.zip -d /usr/local/bin \
+    && unzip -q -o /tmp/nuclei.zip -d /usr/local/bin \
     && chmod 0755 /usr/local/bin/nuclei \
     && mkdir -p /opt/nuclei-templates \
     && nuclei -update-templates -update-template-dir /opt/nuclei-templates -silent \
