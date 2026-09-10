@@ -29,7 +29,7 @@ _USABILITY_ASSETS = {
     "provider-easy-setup.js": "text/javascript; charset=utf-8",
 }
 _AI_SETTING_ENVS = {"TONMEN_AI_PROVIDER", "TONMEN_AI_MODEL", "TONMEN_AI_POOL"}
-_API_KEY_ENVS = {"OPENAI_API_KEY", "DEEPSEEK_API_KEY", "MISTRAL_API_KEY", "GEMINI_API_KEY"}
+_API_KEY_ENVS = {"OPENAI_API_KEY", "DEEPSEEK_API_KEY", "MISTRAL_API_KEY"}
 
 
 def _friendly_error(message: str) -> tuple[str, str | None]:
@@ -125,20 +125,13 @@ class DashboardState(PreflightDashboardState):
 
     def update_ai_configuration(self, data: dict[str, Any]) -> dict[str, Any]:
         lead_enabled = data.get("lead_enabled") if "lead_enabled" in data else None
-        lead_provider = data.get("lead_provider") if "lead_provider" in data else None
         lead_model = data.get("lead_model") if "lead_model" in data else None
         pool = data.get("pool") if "pool" in data else None
         if pool is not None and not isinstance(pool, list):
             raise ValueError("pool must be a list")
-        stored = update_settings(
-            lead_enabled=lead_enabled,
-            lead_provider=lead_provider,
-            lead_model=lead_model,
-            pool=pool,
-        )
-        target_provider = stored.get("lead_provider") or "disabled"
-        if "TONMEN_AI_PROVIDER" not in self._explicit_ai_env:
-            os.environ["TONMEN_AI_PROVIDER"] = target_provider
+        stored = update_settings(lead_enabled=lead_enabled, lead_model=lead_model, pool=pool)
+        if lead_enabled is not None and "TONMEN_AI_PROVIDER" not in self._explicit_ai_env:
+            os.environ["TONMEN_AI_PROVIDER"] = "openai" if bool(lead_enabled) else "disabled"
         if lead_model is not None and "TONMEN_AI_MODEL" not in self._explicit_ai_env:
             os.environ["TONMEN_AI_MODEL"] = str(lead_model).strip()
         if pool is not None and "TONMEN_AI_POOL" not in self._explicit_ai_env:
@@ -253,7 +246,12 @@ class UsabilityDashboardHandler(MissionPreflightDashboardHandler):
         return text.encode("utf-8")
 
     def _provider_index(self) -> bytes:
-        return super()._provider_index()
+        text = super()._provider_index().decode("utf-8")
+        if "/assets/provider-easy-setup.css" not in text:
+            text = text.replace("</head>", '  <link rel="stylesheet" href="/assets/provider-easy-setup.css?v=easy-1">\n</head>')
+        if "/assets/provider-easy-setup.js" not in text:
+            text = text.replace("</body>", '  <script src="/assets/provider-easy-setup.js?v=easy-1"></script>\n</body>')
+        return text.encode("utf-8")
 
     def do_GET(self) -> None:
         path = urlparse(self.path).path.rstrip("/") or "/"

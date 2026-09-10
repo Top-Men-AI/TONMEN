@@ -53,17 +53,11 @@ def get_setting(name: str, default: Any = None) -> Any:
     return _load(_settings_path()).get(name, default)
 
 
-def update_settings(*, lead_enabled: bool | None = None, lead_provider: str | None = None, lead_model: str | None = None, pool: list[str] | None = None) -> dict[str, Any]:
+def update_settings(*, lead_enabled: bool | None = None, lead_model: str | None = None, pool: list[str] | None = None) -> dict[str, Any]:
     path = _settings_path()
     values = _load(path)
-    if lead_provider is not None:
-        p = str(lead_provider).strip().lower()
-        values["lead_provider"] = p
-    elif lead_enabled is not None:
-        if not bool(lead_enabled):
-            values["lead_provider"] = "disabled"
-        elif values.get("lead_provider") in {None, "disabled"}:
-            values["lead_provider"] = "openai"
+    if lead_enabled is not None:
+        values["lead_provider"] = "openai" if bool(lead_enabled) else "disabled"
     if lead_model is not None:
         model = str(lead_model).strip()
         if not model or len(model) > 160:
@@ -76,6 +70,8 @@ def update_settings(*, lead_enabled: bool | None = None, lead_provider: str | No
             if provider == "auto":
                 clean = ["auto"]
                 break
+            if provider not in _ALLOWED_PROVIDERS:
+                raise ValueError(f"unsupported AI provider: {provider}")
             if provider not in clean:
                 clean.append(provider)
         values["pool"] = clean
