@@ -125,13 +125,20 @@ class DashboardState(PreflightDashboardState):
 
     def update_ai_configuration(self, data: dict[str, Any]) -> dict[str, Any]:
         lead_enabled = data.get("lead_enabled") if "lead_enabled" in data else None
+        lead_provider = data.get("lead_provider") if "lead_provider" in data else None
         lead_model = data.get("lead_model") if "lead_model" in data else None
         pool = data.get("pool") if "pool" in data else None
         if pool is not None and not isinstance(pool, list):
             raise ValueError("pool must be a list")
-        stored = update_settings(lead_enabled=lead_enabled, lead_model=lead_model, pool=pool)
-        if lead_enabled is not None and "TONMEN_AI_PROVIDER" not in self._explicit_ai_env:
-            os.environ["TONMEN_AI_PROVIDER"] = "openai" if bool(lead_enabled) else "disabled"
+        stored = update_settings(
+            lead_enabled=lead_enabled,
+            lead_provider=lead_provider,
+            lead_model=lead_model,
+            pool=pool,
+        )
+        target_provider = stored.get("lead_provider") or "disabled"
+        if "TONMEN_AI_PROVIDER" not in self._explicit_ai_env:
+            os.environ["TONMEN_AI_PROVIDER"] = target_provider
         if lead_model is not None and "TONMEN_AI_MODEL" not in self._explicit_ai_env:
             os.environ["TONMEN_AI_MODEL"] = str(lead_model).strip()
         if pool is not None and "TONMEN_AI_POOL" not in self._explicit_ai_env:

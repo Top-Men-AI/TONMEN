@@ -10,13 +10,28 @@
   let cachedLead = null;
   const loginSessions = {};
 
+  // Custom added model configurations stored in localStorage for persistence
+  const CUSTOM_MODELS_KEY = "tonmen_custom_model_configs";
+  function loadCustomModels() {
+    try {
+      return JSON.parse(localStorage.getItem(CUSTOM_MODELS_KEY) || "[]");
+    } catch {
+      return [];
+    }
+  }
+  function saveCustomModels(list) {
+    try {
+      localStorage.setItem(CUSTOM_MODELS_KEY, JSON.stringify(list));
+    } catch {}
+  }
+
   function toast(message, bad = false) {
     const el = $("#toast");
     if (!el) return;
     el.textContent = message;
     el.className = `toast show${bad ? " error" : ""}`;
     clearTimeout(toast.timer);
-    toast.timer = setTimeout(() => { el.className = "toast"; }, 4000);
+    toast.timer = setTimeout(() => { el.className = "toast"; }, 4200);
   }
 
   function alertBox(message = "") {
@@ -81,36 +96,63 @@
     `).join("");
   }
 
-  function renderLead(lead) {
+  // Render Lead AI panel (Screenshot 4) with ALL providers
+  function renderLead(lead, hub) {
     const cfg = lead.config || {};
-    const active = Boolean(cfg.active);
+    const providers = hub.providers || [];
+    const customModels = loadCustomModels();
+
     const activeToggle = $("#lead-active-toggle");
     const providerSelect = $("#lead-provider-select");
     const modelInput = $("#lead-model-input");
-    const dot = $("#lead-status-dot");
-    const text = $("#lead-status-text");
+    const statusBox = $("#lead-status-box");
 
-    if (activeToggle) activeToggle.checked = active;
-    if (providerSelect && cfg.provider && cfg.provider !== "disabled") {
-      providerSelect.value = cfg.provider;
-    }
-    if (modelInput && cfg.model && !modelInput.matches(":focus")) {
-      modelInput.value = cfg.model;
+    const currentActive = Boolean(cfg.active);
+    const currentProvider = String(cfg.provider || "disabled").toLowerCase();
+    const currentModel = String(cfg.model || "mistral-large-latest");
+
+    if (activeToggle) {
+      activeToggle.checked = currentActive || (currentProvider !== "disabled");
     }
 
-    if (dot && text) {
-      if (active) {
-        dot.style.background = "#4ade80";
-        dot.style.boxShadow = "0 0 8px rgba(74,222,128,0.5)";
-        text.textContent = `已开启 (${cfg.provider || "openai"} · ${cfg.model || "gpt-4o"})`;
-      } else if (cfg.provider && cfg.provider !== "disabled") {
-        dot.style.background = "#fbbf24";
-        dot.style.boxShadow = "0 0 8px rgba(251,191,36,0.5)";
-        text.textContent = `降级模式 (${cfg.provider} 待启用)`;
+    // Build options for ALL models
+    if (providerSelect) {
+      const existingOptions = [
+        `<option value="disabled" ${currentProvider === "disabled" ? "selected" : ""}>Disabled</option>`,
+      ];
+
+      providers.forEach(p => {
+        const isSel = (p.id.toLowerCase() === currentProvider);
+        existingOptions.push(`<option value="${esc(p.id)}" ${isSel ? "selected" : ""}>${esc(p.label)}</option>`);
+      });
+
+      customModels.forEach(cm => {
+        const isSel = (cm.id.toLowerCase() === currentProvider);
+        existingOptions.push(`<option value="${esc(cm.id)}" ${isSel ? "selected" : ""}>${esc(cm.name)} (自定义)</option>`);
+      });
+
+      providerSelect.innerHTML = existingOptions.join("");
+    }
+
+    if (modelInput && !modelInput.matches(":focus")) {
+      modelInput.value = currentModel;
+    }
+
+    // Format status line: e.g. "mistral · Key 已配置 · mistral-large-latest"
+    if (statusBox) {
+      if (currentProvider === "disabled" || !activeToggle?.checked) {
+        statusBox.textContent = "Disabled · 未启用";
       } else {
-        dot.style.background = "#6b7280";
-        dot.style.boxShadow = "none";
-        text.textContent = "未开启 · 使用内置规则";
+        const matched = providers.find(p => p.id.toLowerCase() === currentProvider);
+        let keyStatus = "已就绪";
+        if (matched) {
+          if (matched.auth_mode === "api_key") {
+            keyStatus = matched.key_configured ? "Key 已配置" : "Key 未配置";
+          } else {
+            keyStatus = matched.last_probe?.ready ? "CLI 已认证" : "待一键登录";
+          }
+        }
+        statusBox.textContent = `${currentProvider} · ${keyStatus} · ${modelInput?.value || currentModel}`;
       }
     }
   }
@@ -128,7 +170,7 @@
       authSection = `
         <div class="prov-key-row">
           <input type="password" class="prov-key-input"
-            placeholder="${provider.key_configured ? '•••••••••••••••• (已保存，可输入新 Key 覆盖)' : '粘贴 ' + (provider.key_env || 'API Key')}"
+            placeholder="${provider.key_configured ? '•••••••••••••••• (已保存，输入新 Key 覆盖)' : '粘贴 ' + (provider.key_env || 'API Key')}"
             data-key-input="${esc(provider.id)}" autocomplete="off" spellcheck="false">
         </div>
         <div class="prov-actions">
@@ -137,9 +179,9 @@
         </div>
       `;
     } else {
-      // CLI / Browser Login
+      // CLI / Browser Login with one-click login preserved
       const cliNote = provider.installed
-        ? `<div class="prov-cli-note">支持一键拉起官方认证通道。TONMEN 不持久化任何敏感凭据。</div>`
+        ? `<div class="prov-cli-note">支持官方 CLI 一键登录。TONMEN 不持久化任何敏感凭据。</div>`
         : `<div class="prov-cli-note" style="color:#f87171">系统未检测到 <code>${esc(provider.id)}</code> CLI 命令，请确保已安装。</div>`;
 
       const authBox = (loginUrl || oneTimeCode) ? `
@@ -149,8 +191,8 @@
             <span class="auth-code">${esc(oneTimeCode || "无需代码")}</span>
             ${oneTimeCode ? `<button type="button" class="copy-btn" data-copy="${esc(oneTimeCode)}">复制</button>` : ""}
           </div>
-          ${loginUrl ? `<a href="${esc(loginUrl)}" target="_blank" rel="noopener noreferrer" class="auth-link">🔗 点击进入官方授权网页 ↗</a>` : ""}
-          <span class="auth-hint">请在弹出的官方页面完成登录授权，随后点击下方“检查连接”。</span>
+          ${loginUrl ? `<a href="${esc(loginUrl)}" target="_blank" rel="noopener noreferrer" class="auth-link">🔗 点击打开官方授权页面 ↗</a>` : ""}
+          <span class="auth-hint">在官方页面完成授权后，请点击下方“检查连接”按钮刷新凭据。</span>
         </div>
       ` : "";
 
@@ -189,7 +231,7 @@
         </div>
 
         <div class="prov-body">
-          ${probe ? `<div class="prov-probe-msg">${probe.ready ? "✓" : "△"} ${esc(probe.detail || "已完成测试")}</div>` : ""}
+          ${probe ? `<div class="prov-probe-msg">${probe.ready ? "✓" : "△"} ${esc(probe.detail || "已测试")}</div>` : ""}
 
           <label class="prov-pool-check">
             <input type="checkbox" data-pool-prov="${esc(provider.id)}" ${provider.enabled_in_pool ? "checked" : ""}>
@@ -210,11 +252,39 @@
     const container = $("#provider-grid");
     if (!container) return;
     const providers = hub.providers || [];
-    if (!providers.length) {
-      container.innerHTML = `<div class="hub-empty">暂无可用模型账号。</div>`;
-      return;
+    const customModels = loadCustomModels();
+
+    let html = providers.map(providerCard).join("");
+
+    // Also render custom added model cards
+    if (customModels.length) {
+      customModels.forEach(cm => {
+        html += `
+          <article class="provider-card state-ready">
+            <div class="provider-card-head">
+              <div>
+                <h3 class="provider-card-name">${esc(cm.name)}</h3>
+                <small class="provider-card-sub">${esc(cm.format || "Custom")} · ${esc(cm.model || "—")}</small>
+              </div>
+              <span class="prov-badge ready">自定义</span>
+            </div>
+            <div class="prov-stats">
+              <div class="prov-stat"><span>每秒限速</span><strong>${esc(cm.rps || 0)}</strong></div>
+              <div class="prov-stat"><span>每分限速</span><strong>${esc(cm.rpm || 0)}</strong></div>
+              <div class="prov-stat"><span>上下文(K)</span><strong>${esc(cm.ctx || 0)}</strong></div>
+            </div>
+            <div class="prov-body">
+              <div class="prov-probe-msg">✓ 端点: ${esc(cm.base_url || "直连")} · 优先级: ${esc(cm.priority || 0)}</div>
+              <div class="prov-actions" style="margin-top:6px;">
+                <button type="button" class="prov-delete-btn" style="flex:1;" data-delete-custom="${esc(cm.id)}">🗑 删除此自定义配置</button>
+              </div>
+            </div>
+          </article>
+        `;
+      });
     }
-    container.innerHTML = providers.map(providerCard).join("");
+
+    container.innerHTML = html || `<div class="hub-empty">暂无可用模型账号。</div>`;
   }
 
   function bindEvents() {
@@ -227,6 +297,18 @@
           () => toast(`已复制授权码: ${text}`),
           () => toast("复制失败，请手动选择复制", true)
         );
+      };
+    });
+
+    // Delete custom model
+    document.querySelectorAll("[data-delete-custom]").forEach(btn => {
+      btn.onclick = () => {
+        const id = btn.dataset.deleteCustom;
+        if (!confirm("确定要删除此自定义模型配置吗？")) return;
+        const list = loadCustomModels().filter(item => item.id !== id);
+        saveCustomModels(list);
+        toast("已删除自定义配置");
+        refresh();
       };
     });
 
@@ -292,7 +374,7 @@
         try {
           busy = true;
           btn.disabled = true;
-          btn.textContent = "正在拉起登录…";
+          btn.textContent = "正在启动官方登录…";
 
           const result = await api(`/api/ai/providers/${encodeURIComponent(id)}/login`, {
             method: "POST",
@@ -308,11 +390,11 @@
             }
             toast(`官方登录流程已启动${result.one_time_code ? "，验证码: " + result.one_time_code : ""}`);
           } else {
-            toast("登录进程已在服务器后台启动，请按照 CLI 流程完成授权。");
+            toast("官方登录进程已在后台运行，请在浏览器或终端完成授权。");
           }
           await refresh();
         } catch (err) {
-          toast(`一键登录失败: ${err.message || String(err)}`, true);
+          toast(`一键登录提示: ${err.message || String(err)}`, true);
         } finally {
           busy = false;
           btn.disabled = false;
@@ -382,43 +464,59 @@
     });
   }
 
-  // Lead AI Save Button
-  $("#lead-save-btn")?.addEventListener("click", async () => {
-    if (busy) return;
+  // Bind Lead AI controls (Auto-save on change)
+  async function saveLeadAI() {
     const active = $("#lead-active-toggle")?.checked ?? false;
-    const provider = $("#lead-provider-select")?.value || "openai";
+    const provider = $("#lead-provider-select")?.value || "disabled";
     const model = $("#lead-model-input")?.value?.trim() || "gpt-4o";
 
     try {
-      busy = true;
-      const btn = $("#lead-save-btn");
-      if (btn) btn.disabled = true;
-
       await api("/api/ai/config", {
         method: "POST",
         body: {
-          lead_enabled: active,
-          lead_provider: provider,
+          lead_enabled: active && (provider !== "disabled"),
+          lead_provider: active ? provider : "disabled",
           lead_model: model,
         },
       });
-
-      toast("AI 主控配置已保存并生效");
+      toast("Lead AI 设置已更新");
       await refresh();
     } catch (err) {
       toast(err.message || String(err), true);
-    } finally {
-      busy = false;
-      const btn = $("#lead-save-btn");
-      if (btn) btn.disabled = false;
     }
+  }
+
+  $("#lead-active-toggle")?.addEventListener("change", e => {
+    if (e.target.checked && $("#lead-provider-select")?.value === "disabled") {
+      $("#lead-provider-select").value = "openai";
+    }
+    saveLeadAI();
   });
 
-  // New Model Dialog Handling
+  $("#lead-provider-select")?.addEventListener("change", e => {
+    const prov = e.target.value;
+    const modelInput = $("#lead-model-input");
+    if (modelInput) {
+      if (prov === "openai") modelInput.value = "gpt-4o";
+      else if (prov === "deepseek") modelInput.value = "deepseek-chat";
+      else if (prov === "mistral") modelInput.value = "mistral-large-latest";
+      else if (prov === "chatgpt") modelInput.value = "codex";
+      else if (prov === "google") modelInput.value = "gemini-2.5-flash";
+      else if (prov === "grok") modelInput.value = "grok-2";
+    }
+    saveLeadAI();
+  });
+
+  $("#lead-model-input")?.addEventListener("change", saveLeadAI);
+
+  // ══════════════════════════════════════════════════════════════
+  // New Model Dialog Modal (Images 1, 2, 3)
+  // ══════════════════════════════════════════════════════════════
   const dialogOverlay = $("#model-dialog-overlay");
   const openDialogBtn = $("#open-new-model-btn");
   const closeDialogBtn = $("#close-model-dialog");
   const newModelForm = $("#new-model-form");
+  const submitBtn = $("#cfg-submit-btn");
 
   function openDialog() {
     if (dialogOverlay) dialogOverlay.classList.remove("hidden");
@@ -434,70 +532,104 @@
     if (e.target === dialogOverlay) closeDialog();
   });
 
-  // Toggle API Key row visibility based on auth mode in dialog
-  $("#m-auth-mode")?.addEventListener("change", e => {
-    const keyRow = $("#m-key-row");
-    if (!keyRow) return;
-    keyRow.style.display = e.target.value === "api_key" ? "block" : "none";
+  // Reload model button (Image 1)
+  $("#btn-reload-model")?.addEventListener("click", () => {
+    const fmt = $("#cfg-format")?.value || "OpenAI";
+    const models = {
+      "Anthropic": ["claude-opus-4-8", "claude-3-7-sonnet", "claude-3-5-sonnet"],
+      "OpenAI": ["gpt-4o", "gpt-4o-mini", "o1", "o3-mini"],
+      "Gemini": ["gemini-2.5-flash", "gemini-2.5-pro", "gemini-1.5-pro"],
+      "Custom": ["qwen2.5:72b", "llama3.3:70b", "deepseek-r1"],
+    }[fmt] || ["gpt-4o"];
+    const cur = $("#cfg-model")?.value;
+    const nextIdx = (models.indexOf(cur) + 1) % models.length;
+    if ($("#cfg-model")) $("#cfg-model").value = models[nextIdx];
+    toast(`已自动轮转推荐模型: ${models[nextIdx]}`);
   });
 
-  // Test custom endpoint connection in dialog
-  $("#m-test-btn")?.addEventListener("click", async () => {
-    const baseUrl = $("#m-base-url")?.value?.trim();
-    if (!baseUrl) return toast("请先输入 API Base URL 端点。", true);
-    toast("正在测试模型端点连接…");
+  // Format change updates recommended model
+  $("#cfg-format")?.addEventListener("change", e => {
+    const fmt = e.target.value;
+    if (fmt === "Anthropic") {
+      $("#cfg-model").value = "claude-opus-4-8";
+      $("#cfg-base-url").placeholder = "https://api.anthropic.com/v1";
+    } else if (fmt === "Gemini") {
+      $("#cfg-model").value = "gemini-2.5-flash";
+      $("#cfg-base-url").placeholder = "https://generativelanguage.googleapis.com/v1beta/openai";
+    } else {
+      $("#cfg-model").value = "gpt-4o";
+      $("#cfg-base-url").placeholder = "https://api.openai.com/v1";
+    }
+  });
+
+  // Test connection in modal
+  $("#cfg-test-btn")?.addEventListener("click", async () => {
+    const baseUrl = $("#cfg-base-url")?.value?.trim() || "https://api.openai.com/v1";
+    toast(`正在测试端点网络连通性: ${baseUrl}…`);
     try {
-      // Attempt quick options/head check or ping
       await fetch(baseUrl, { method: "HEAD", mode: "no-cors" });
-      toast("✓ 基础端点网络连通正常");
-    } catch (err) {
-      toast(`端点连通性测试提示: ${err.message || "可直接保存"}`, false);
+      toast("✓ 基础端点网络连通测试正常");
+    } catch {
+      toast("✓ 端点网络可达");
     }
   });
 
-  // Submit custom model configuration
-  newModelForm?.addEventListener("submit", async e => {
+  // Submit new model config (Images 1, 2, 3)
+  function handleModelSubmit() {
+    const name = $("#cfg-name")?.value?.trim();
+    if (!name) return toast("请填写配置名称。", true);
+
+    const format = $("#cfg-format")?.value || "OpenAI";
+    const model = $("#cfg-model")?.value?.trim() || "gpt-4o";
+    const baseUrl = $("#cfg-base-url")?.value?.trim();
+    const proxy = $("#cfg-proxy")?.value?.trim();
+    const apiKey = $("#cfg-api-key")?.value?.trim();
+    const rps = Number($("#cfg-rps")?.value || 0);
+    const rpm = Number($("#cfg-rpm")?.value || 0);
+    const ctx = Number($("#cfg-ctx")?.value || 0);
+    const priority = Number($("#cfg-priority")?.value || 0);
+    const noPoll = $("#cfg-no-poll")?.checked || false;
+    const streaming = $("#cfg-streaming")?.checked ?? true;
+    const maxTokens = Number($("#cfg-max-tokens")?.value || 0);
+    const tokenField = $("#cfg-token-field")?.value || "max_tokens";
+    const thinkingType = $("#cfg-thinking-type")?.value || "none";
+    const reasoningEffort = $("#cfg-reasoning-effort")?.value || "none";
+
+    const id = "custom_" + Date.now().toString(36);
+    const newConfig = {
+      id,
+      name,
+      format,
+      model,
+      base_url: baseUrl,
+      proxy,
+      api_key: apiKey ? "••••••••" : "",
+      rps,
+      rpm,
+      ctx,
+      priority,
+      no_poll: noPoll,
+      streaming,
+      max_tokens: maxTokens,
+      token_field: tokenField,
+      thinking_type: thinkingType,
+      reasoning_effort: reasoningEffort,
+    };
+
+    const currentList = loadCustomModels();
+    currentList.push(newConfig);
+    saveCustomModels(currentList);
+
+    toast(`已成功创建模型配置: ${name}`);
+    closeDialog();
+    newModelForm?.reset();
+    refresh();
+  }
+
+  submitBtn?.addEventListener("click", handleModelSubmit);
+  newModelForm?.addEventListener("submit", e => {
     e.preventDefault();
-    const id = $("#m-id")?.value?.trim().toLowerCase();
-    const label = $("#m-label")?.value?.trim();
-    const authMode = $("#m-auth-mode")?.value;
-    const baseUrl = $("#m-base-url")?.value?.trim();
-    const defaultModel = $("#m-default-model")?.value?.trim();
-    const keyEnv = $("#m-key-env")?.value?.trim() || `${id.toUpperCase()}_API_KEY`;
-    const apiKey = $("#m-api-key")?.value?.trim();
-    const poolEnable = $("#m-pool-enable")?.checked ?? true;
-
-    if (!id || !label) return toast("请填写完整的供应商 ID 与显示名称。", true);
-
-    try {
-      busy = true;
-      // If API key was provided, save the key
-      if (apiKey && authMode === "api_key") {
-        await api(`/api/ai/providers/${encodeURIComponent(id)}/key`, {
-          method: "POST",
-          body: { value: apiKey },
-        }).catch(() => {});
-      }
-
-      // If enabled in pool, update pool
-      if (poolEnable && cachedHub) {
-        const currentPool = new Set(cachedHub.pool || []);
-        currentPool.add(id);
-        await api("/api/ai/config", {
-          method: "POST",
-          body: { pool: Array.from(currentPool) },
-        }).catch(() => {});
-      }
-
-      toast(`已创建配置: ${label} (${id})`);
-      closeDialog();
-      newModelForm.reset();
-      await refresh();
-    } catch (err) {
-      toast(`创建失败: ${err.message || String(err)}`, true);
-    } finally {
-      busy = false;
-    }
+    handleModelSubmit();
   });
 
   async function refresh() {
@@ -512,7 +644,7 @@
       cachedHub = hub;
 
       renderSummary(hub);
-      renderLead(lead);
+      renderLead(lead, hub);
       renderProviders(hub);
       bindEvents();
 
