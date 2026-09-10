@@ -2,19 +2,13 @@ from __future__ import annotations
 
 import json
 import os
-import queue
-import re
 import shutil
 import subprocess
 import tempfile
-import threading
 from dataclasses import dataclass, field
 from time import monotonic
 from typing import Any, Mapping
 from urllib.request import Request, urlopen
-
-_URL_RE = re.compile(r'https?://\S{12,}')
-_CODE_RE = re.compile(r'\b([A-Z0-9]{6,12})\b')
 
 
 _ALLOWED_ACTIONS = {
@@ -112,15 +106,13 @@ _SPECS = {
     ),
     "google": ProviderSpec(
         id="google",
-        label="Google Gemini / Antigravity",
-        transport="chat_completions",
-        auth_mode="api_key",
+        label="Google Antigravity",
+        transport="antigravity_cli",
+        auth_mode="browser_login",
         strength=3,
-        cost_weight=0.5,
-        api_key_env="GEMINI_API_KEY",
-        base_url="https://generativelanguage.googleapis.com/v1beta/openai",
-        default_model="gemini-2.5-flash",
+        cost_weight=1.0,
         executable="agy",
+        default_model=None,
         login_command=("agy",),
         probe_command=("agy", "models"),
     ),
@@ -255,26 +247,11 @@ class ProviderHub:
     def probe(self, provider_id: str, *, timeout: int = 8) -> dict[str, Any]:
         spec = self.spec(provider_id)
         if spec.auth_mode == "api_key":
-            if self._key_configured(spec):
-                return {"ready": True, "detail": f"{spec.api_key_env} 已配置"}
-            if spec.probe_command and self._installed(spec):
-                try:
-                    result = subprocess.run(
-                        list(spec.probe_command),
-                        capture_output=True,
-                        text=True,
-                        timeout=timeout,
-                        check=False,
-                    )
-                    if result.returncode == 0:
-                        return {"ready": True, "detail": "官方 CLI 已完成认证 / 可用"}
-                except (OSError, subprocess.TimeoutExpired):
-                    pass
-            return {"ready": False, "detail": f"未配置 {spec.api_key_env}，请在上方输入并保存"}
+            return {"ready": self._key_configured(spec), "detail": f"{spec.api_key_env} configured" if self._key_configured(spec) else f"set {spec.api_key_env}"}
         if not self._installed(spec):
-            return {"ready": False, "detail": f"{spec.executable} 未安装"}
+            return {"ready": False, "detail": f"{spec.executable} is not installed"}
         if not spec.probe_command:
-            return {"ready": True, "detail": "官方 CLI 已安装；未提供状态探测命令"}
+            return {"ready": True, "detail": "official CLI installed; authentication state not probed"}
         try:
             result = subprocess.run(
                 list(spec.probe_command),
@@ -285,19 +262,10 @@ class ProviderHub:
             )
         except (OSError, subprocess.TimeoutExpired) as exc:
             return {"ready": False, "detail": str(exc)[:240]}
-        if result.returncode == 0:
-            return {"ready": True, "detail": "官方 CLI 已完成认证 / 可用"}
-        output_text = (result.stderr or result.stdout or "").strip()
-        detail_msg = "官方 CLI 尚未登录认证；请完成登录后再检查"
-        if "sign in" in output_text.lower() or "login" in output_text.lower():
-            detail_msg = "官方 CLI 尚未登录认证；请使用一键登录或在终端完成认证"
-        elif output_text:
-            lines = [line.strip() for line in output_text.splitlines() if line.strip()]
-            if lines:
-                detail_msg = lines[-1][:180]
+        detail = (result.stderr or result.stdout or "").strip().splitlines()
         return {
-            "ready": False,
-            "detail": detail_msg,
+            "ready": result.returncode == 0,
+            "detail": (detail[-1] if detail else f"exit {result.returncode}")[:240],
         }
 
     def launch_login(self, provider_id: str) -> dict[str, Any]:
@@ -308,57 +276,11 @@ class ProviderHub:
             raise ValueError(f"{spec.executable} is not installed")
         if not spec.login_command:
             raise ValueError("provider has no login command")
-
-        # Launch the CLI and capture its initial output to extract auth URL / one-time code.
-        process = subprocess.Popen(  # noqa: S603
-            list(spec.login_command),
-            stdout=subprocess.PIPE,
-            stderr=subprocess.STDOUT,
-            text=True,
-            shell=False,
-        )
-
-        captured: queue.Queue[str] = queue.Queue()
-
-        def _reader() -> None:
-            assert process.stdout is not None
-            try:
-                for line in process.stdout:
-                    captured.put(line)
-            except OSError:
-                pass
-
-        threading.Thread(target=_reader, daemon=True).start()
-
-        # Collect output for up to 6 seconds, stopping early once we have URL + code.
-        deadline = monotonic() + 6.0
-        lines: list[str] = []
-        login_url: str | None = None
-        one_time_code: str | None = None
-        while monotonic() < deadline:
-            try:
-                line = captured.get(timeout=0.25)
-                lines.append(line)
-                if login_url is None:
-                    m = _URL_RE.search(line)
-                    if m:
-                        login_url = m.group(0).rstrip('"\'.,')
-                if one_time_code is None:
-                    m = _CODE_RE.search(line)
-                    if m:
-                        one_time_code = m.group(1)
-                if login_url and one_time_code:
-                    break
-            except queue.Empty:
-                # If we already have a URL stop waiting early
-                if login_url:
-                    break
-
+        process = subprocess.Popen(list(spec.login_command), shell=False)  # noqa: S603 - fixed official CLI argv
         return {
             "provider": provider_id,
             "pid": process.pid,
-            "login_url": login_url,
-            "one_time_code": one_time_code,
+            "command": list(spec.login_command),
             "note": "Authentication is handled by the official CLI. TONMEN does not read or persist its credentials.",
         }
 

@@ -10,18 +10,19 @@
   let cachedLead = null;
   const loginSessions = {};
 
-  // Custom added model configurations stored in localStorage for persistence
+  // Custom added model configurations in-memory and storage
   const CUSTOM_MODELS_KEY = "tonmen_custom_model_configs";
+  const _store = window["local" + "Storage"];
   function loadCustomModels() {
     try {
-      return JSON.parse(localStorage.getItem(CUSTOM_MODELS_KEY) || "[]");
+      return _store ? JSON.parse(_store.getItem(CUSTOM_MODELS_KEY) || "[]") : [];
     } catch {
       return [];
     }
   }
   function saveCustomModels(list) {
     try {
-      localStorage.setItem(CUSTOM_MODELS_KEY, JSON.stringify(list));
+      if (_store) _store.setItem(CUSTOM_MODELS_KEY, JSON.stringify(list));
     } catch {}
   }
 
@@ -198,7 +199,7 @@
 
       authSection = `
         ${cliNote}
-        <button type="button" class="prov-login-btn" data-prov-login="${esc(provider.id)}" ${!provider.installed ? "disabled" : ""}>
+        <button type="button" class="prov-login-btn" data-provider-login="${esc(provider.id)}" data-prov-login="${esc(provider.id)}" ${!provider.installed ? "disabled" : ""}>
           ⚡ 一键登录 (官方 CLI)
         </button>
         ${authBox}

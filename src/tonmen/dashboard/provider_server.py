@@ -122,19 +122,17 @@ class DashboardState(BaseDashboardState):
             spec = hub.spec(provider_id)
             raw = hub.probe(provider_id)
             ready = bool(raw.get("ready"))
-            detail = raw.get("detail")
-            if not detail:
-                if spec.auth_mode == "browser_login":
-                    installed = hub._installed(spec)
-                    detail = (
-                        "官方 CLI 已完成认证 / 就绪"
-                        if ready
-                        else f"{spec.executable} 未安装"
-                        if not installed
-                        else "官方 CLI 尚未登录认证"
-                    )
-                else:
-                    detail = f"{spec.api_key_env} 已配置" if ready else f"未配置 {spec.api_key_env}"
+            if spec.auth_mode == "browser_login":
+                installed = hub._installed(spec)
+                detail = (
+                    "official CLI reports authenticated / ready"
+                    if ready
+                    else f"{spec.executable} is not installed"
+                    if not installed
+                    else "official CLI did not confirm an authenticated session"
+                )
+            else:
+                detail = f"{spec.api_key_env} configured" if ready else f"set {spec.api_key_env} on the TONMEN server"
             result = {"provider": provider_id, "ready": ready, "detail": detail, "auth_mode": spec.auth_mode}
             self._provider_probes[provider_id] = result
             self.events.publish("ai.provider_probed", provider=provider_id, ready=ready, auth_mode=spec.auth_mode)
@@ -145,15 +143,11 @@ class DashboardState(BaseDashboardState):
             hub = ProviderHub()
             spec = hub.spec(provider_id)
             launched = hub.launch_login(provider_id)
-            login_url = launched.get("login_url")
-            one_time_code = launched.get("one_time_code")
             self._provider_probes[provider_id] = {
                 "provider": provider_id,
                 "ready": False,
-                "detail": "正在启动官方登录流程；请在浏览器完成授权，然后点击检查连接。",
+                "detail": "login flow launched; finish authentication in the official browser/CLI, then check connection",
                 "auth_mode": spec.auth_mode,
-                "login_url": login_url,
-                "one_time_code": one_time_code,
             }
             self.events.publish("ai.provider_login_started", provider=provider_id, auth_mode=spec.auth_mode)
             return {
@@ -161,8 +155,6 @@ class DashboardState(BaseDashboardState):
                 "label": spec.label,
                 "pid": launched.get("pid"),
                 "auth_mode": spec.auth_mode,
-                "login_url": login_url,
-                "one_time_code": one_time_code,
                 "note": "Authentication is handled by the official CLI; TONMEN does not read or persist its credentials.",
             }
 
