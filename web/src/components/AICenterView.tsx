@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
-import { Bot, ExternalLink, KeyRound, LoaderCircle, LogIn, Plus, RefreshCw, Save, ShieldCheck, Trash2 } from 'lucide-react';
+import { Bot, ExternalLink, KeyRound, LoaderCircle, LogIn, RefreshCw, Save, ShieldCheck, Trash2 } from 'lucide-react';
 import { savedToken } from '../api';
-import { NewModelConfigPage } from './NewModelConfigPage';
+import { LLMConfigView } from './LLMConfigView';
 
 interface AICenterViewProps {
   data: Record<string, any>;
@@ -39,7 +39,6 @@ export const AICenterView: React.FC<AICenterViewProps> = ({ data, lead, onSave, 
   const [loginSessions, setLoginSessions] = useState<Record<string, Record<string, any>>>({});
   const [busy, setBusy] = useState('');
   const [error, setError] = useState('');
-  const [showNewModel, setShowNewModel] = useState(false);
 
   useEffect(() => {
     setEnabled(Boolean(lead.enabled));
@@ -100,14 +99,9 @@ export const AICenterView: React.FC<AICenterViewProps> = ({ data, lead, onSave, 
 
   return (
     <div className="flex-1 p-4 sm:p-6 md:p-8 overflow-y-auto text-slate-100 space-y-5 max-w-6xl w-full mx-auto">
-      <div className="border-b border-slate-800 pb-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-        <div>
-          <h1 className="text-xl font-bold flex items-center gap-2"><Bot className="w-4 h-4 text-purple-400" />AI Provider Hub</h1>
-          <p className="text-xs text-slate-400 mt-1">显示 Tiangong ProviderHub 返回的实际配置、认证、连接和历史用量</p>
-        </div>
-        <button type="button" onClick={() => setShowNewModel(true)} className="shrink-0 px-4 py-2 rounded-xl bg-purple-600 hover:bg-purple-500 text-xs font-bold flex items-center justify-center gap-1.5">
-          <Plus className="w-3.5 h-3.5" />新建模型配置
-        </button>
+      <div className="border-b border-slate-800 pb-4">
+        <h1 className="text-xl font-bold flex items-center gap-2"><Bot className="w-4 h-4 text-purple-400" />AI Provider Hub</h1>
+        <p className="text-xs text-slate-400 mt-1">显示 Tiangong ProviderHub 返回的实际配置、认证、连接和历史用量</p>
       </div>
 
       {error && <div className="rounded-xl border border-rose-500/30 bg-rose-950/30 p-3 text-xs text-rose-300 break-words">{error}</div>}
@@ -154,6 +148,8 @@ export const AICenterView: React.FC<AICenterViewProps> = ({ data, lead, onSave, 
           {busy === 'settings' ? <LoaderCircle className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}保存到后端
         </button>
       </div>
+
+      <LLMConfigView />
 
       <div className="grid md:grid-cols-2 gap-4">
         {providers.map((provider: any) => {
@@ -237,7 +233,6 @@ export const AICenterView: React.FC<AICenterViewProps> = ({ data, lead, onSave, 
 
       {providers.length === 0 && <div className="p-10 text-center rounded-2xl border border-dashed border-slate-700 text-sm text-slate-500">后端没有 Provider 记录</div>}
       <div className="text-[11px] text-slate-500 flex items-start gap-1.5"><ShieldCheck className="w-3.5 h-3.5 mt-0.5 shrink-0" /><span>浏览器不读取已保存的 API Key 或 CLI 凭据值；网页登录只显示官方授权 URL / 一次性代码，READY 必须由真实连接探测确认。</span></div>
-      {showNewModel && <NewModelConfigPage onClose={() => setShowNewModel(false)} />}
     </div>
   );
 };

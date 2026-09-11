@@ -1,7 +1,12 @@
 import React, { useState } from 'react';
 import { Link, LoaderCircle, Plus } from 'lucide-react';
 
-export interface NewModelConfigPayload {
+export interface LLMConfig {
+  id: string;
+  name: string;
+  format: string;
+  model: string;
+  api_key: string;
   rps: number;
   rpm: number;
   ctx_k: number;
@@ -12,162 +17,72 @@ export interface NewModelConfigPayload {
   token_field: string;
   thinking_type: string;
   reasoning_effort: string;
+  active: boolean;
 }
+
+export const EMPTY_CONFIG: Omit<LLMConfig, 'id' | 'active'> = {
+  name: '',
+  format: 'OpenAI',
+  model: '',
+  api_key: '',
+  rps: 0,
+  rpm: 0,
+  ctx_k: 0,
+  poll_priority: 0,
+  no_poll: false,
+  streaming: true,
+  max_tokens: 0,
+  token_field: 'max_tokens',
+  thinking_type: 'none',
+  reasoning_effort: 'none',
+};
 
 interface NewModelConfigPageProps {
+  initial?: Partial<LLMConfig>;
   onClose: () => void;
-  onSubmit?: (payload: NewModelConfigPayload) => void | Promise<void>;
+  onSubmit: (payload: Omit<LLMConfig, 'id' | 'active'>) => void;
 }
 
-const CUSTOM_MODELS_KEY = 'tonmen.custom_models';
-
 const styles: Record<string, React.CSSProperties> = {
-  overlay: {
-    position: 'fixed',
-    inset: 0,
-    zIndex: 200,
-    background: '#ffffff',
-    display: 'flex',
-    flexDirection: 'column',
-    color: '#111827',
-  },
-  header: {
-    display: 'flex',
-    alignItems: 'flex-start',
-    justifyContent: 'space-between',
-    padding: '20px 24px 6px',
-    flexShrink: 0,
-  },
-  title: { margin: 0, fontSize: 18, fontWeight: 600, letterSpacing: '-.01em' },
-  close: {
-    background: 'transparent',
-    border: 'none',
-    fontSize: 20,
-    lineHeight: 1,
-    color: '#9ca3af',
-    cursor: 'pointer',
-    padding: '2px 6px',
-    borderRadius: 6,
-    fontFamily: 'inherit',
-  },
+  overlay: { position: 'fixed', inset: 0, zIndex: 200, background: '#f7f7f5', display: 'flex', flexDirection: 'column', color: '#1a1a1a' },
+  header: { display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', padding: '20px 24px 6px', flexShrink: 0 },
+  title: { margin: 0, fontSize: 18, fontWeight: 700, letterSpacing: '-.01em' },
+  close: { background: 'transparent', border: 'none', fontSize: 22, lineHeight: 1, color: '#9ca3af', cursor: 'pointer', padding: '2px 6px', borderRadius: 6, fontFamily: 'inherit' },
   sub: { padding: '0 24px 16px', margin: 0, fontSize: 12.5, color: '#6b7280', flexShrink: 0 },
   body: { padding: '0 24px 18px', overflowY: 'auto', flex: 1, minHeight: 0 },
+  row2: { display: 'grid', gridTemplateColumns: '1.4fr 1fr', gap: 12, marginBottom: 14 },
   row3: { display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 10, marginBottom: 6 },
   field: { display: 'flex', flexDirection: 'column', marginBottom: 14 },
   label: { fontSize: 12.5, fontWeight: 600, color: '#1f2937', marginBottom: 6 },
-  input: {
-    background: '#fff',
-    border: '1px solid #d1d5db',
-    borderRadius: 8,
-    padding: '9px 12px',
-    fontSize: 13,
-    color: '#111827',
-    outline: 'none',
-    width: '100%',
-    fontFamily: 'inherit',
-  },
+  input: { background: '#fff', border: '1px solid #d1d5db', borderRadius: 8, padding: '9px 12px', fontSize: 13, color: '#111827', outline: 'none', width: '100%', fontFamily: 'inherit' },
   desc: { margin: '5px 0 0', fontSize: 11, color: '#6b7280', lineHeight: 1.55 },
-  group: { border: '1px solid #e5e7eb', borderRadius: 10, padding: 14, marginBottom: 14 },
-  groupRow: {
-    display: 'flex',
-    alignItems: 'flex-start',
-    justifyContent: 'space-between',
-    gap: 14,
-    padding: '12px 0',
-    borderTop: '1px solid #f3f4f6',
-  },
+  group: { border: '1px solid #e5e7eb', borderRadius: 10, padding: 14, marginBottom: 14, background: '#fff' },
+  groupRow: { display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 14, padding: '12px 0', borderTop: '1px solid #f3f4f6' },
   groupInfoStrong: { display: 'block', fontSize: 12.5, fontWeight: 600, color: '#1f2937', marginBottom: 3 },
   groupInfoP: { margin: 0, fontSize: 11, color: '#6b7280', lineHeight: 1.5 },
-  numInput: {
-    width: 82,
-    flexShrink: 0,
-    border: '1px solid #d1d5db',
-    borderRadius: 6,
-    padding: '6px 8px',
-    fontSize: 13,
-    textAlign: 'center',
-    color: '#111827',
-    outline: 'none',
-    fontFamily: 'inherit',
-  },
-  select: {
-    minWidth: 150,
-    flexShrink: 0,
-    border: '1px solid #d1d5db',
-    borderRadius: 6,
-    padding: '6px 10px',
-    fontSize: 12.5,
-    color: '#111827',
-    outline: 'none',
-    fontFamily: 'inherit',
-    background: '#fff',
-  },
-  footer: {
-    padding: '14px 24px',
-    borderTop: '1px solid #e5e7eb',
-    background: '#fff',
-    display: 'flex',
-    gap: 10,
-    alignItems: 'center',
-    flexShrink: 0,
-  },
-  btnTest: {
-    display: 'inline-flex',
-    alignItems: 'center',
-    gap: 6,
-    background: '#fff',
-    border: '1px solid #d1d5db',
-    borderRadius: 8,
-    color: '#1f2937',
-    fontSize: 13,
-    fontWeight: 500,
-    padding: '10px 16px',
-    cursor: 'pointer',
-    whiteSpace: 'nowrap',
-    fontFamily: 'inherit',
-  },
-  btnCreate: {
-    flex: 1,
-    display: 'inline-flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 6,
-    background: '#18181b',
-    border: 'none',
-    borderRadius: 8,
-    color: '#fff',
-    fontSize: 14,
-    fontWeight: 600,
-    padding: '11px 20px',
-    cursor: 'pointer',
-    fontFamily: 'inherit',
-  },
-  toast: {
-    position: 'fixed',
-    left: '50%',
-    bottom: 24,
-    transform: 'translateX(-50%)',
-    padding: '10px 18px',
-    borderRadius: 8,
-    fontSize: 13,
-    color: '#fff',
-    zIndex: 300,
-    maxWidth: '90vw',
-    boxShadow: '0 8px 24px rgba(0,0,0,.25)',
-  },
+  numInput: { width: 82, flexShrink: 0, border: '1px solid #d1d5db', borderRadius: 6, padding: '6px 8px', fontSize: 13, textAlign: 'center', color: '#111827', outline: 'none', fontFamily: 'inherit' },
+  select: { minWidth: 150, flexShrink: 0, border: '1px solid #d1d5db', borderRadius: 6, padding: '6px 10px', fontSize: 12.5, color: '#111827', outline: 'none', fontFamily: 'inherit', background: '#fff' },
+  footer: { padding: '14px 24px', borderTop: '1px solid #e5e7eb', background: '#fff', display: 'flex', gap: 10, alignItems: 'center', flexShrink: 0 },
+  btnTest: { display: 'inline-flex', alignItems: 'center', gap: 6, background: '#fff', border: '1px solid #d1d5db', borderRadius: 8, color: '#1f2937', fontSize: 13, fontWeight: 500, padding: '10px 16px', cursor: 'pointer', whiteSpace: 'nowrap', fontFamily: 'inherit' },
+  btnCreate: { flex: 1, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 6, background: '#18181b', border: 'none', borderRadius: 8, color: '#fff', fontSize: 14, fontWeight: 600, padding: '11px 20px', cursor: 'pointer', fontFamily: 'inherit' },
+  toast: { position: 'fixed', left: '50%', bottom: 24, transform: 'translateX(-50%)', padding: '10px 18px', borderRadius: 8, fontSize: 13, color: '#fff', zIndex: 300, maxWidth: '90vw', boxShadow: '0 8px 24px rgba(0,0,0,.25)' },
 };
 
-export const NewModelConfigPage: React.FC<NewModelConfigPageProps> = ({ onClose, onSubmit }) => {
-  const [rps, setRps] = useState('0');
-  const [rpm, setRpm] = useState('0');
-  const [ctxK, setCtxK] = useState('0');
-  const [priority, setPriority] = useState('0');
-  const [noPoll, setNoPoll] = useState(false);
-  const [streaming, setStreaming] = useState(true);
-  const [maxTokens, setMaxTokens] = useState('0');
-  const [tokenField, setTokenField] = useState('max_tokens');
-  const [thinkingType, setThinkingType] = useState('none');
-  const [reasoningEffort, setReasoningEffort] = useState('none');
+export const NewModelConfigPage: React.FC<NewModelConfigPageProps> = ({ initial, onClose, onSubmit }) => {
+  const [name, setName] = useState(String(initial?.name || ''));
+  const [format, setFormat] = useState(String(initial?.format || 'OpenAI'));
+  const [model, setModel] = useState(String(initial?.model || ''));
+  const [apiKey, setApiKey] = useState(String(initial?.api_key || ''));
+  const [rps, setRps] = useState(String(initial?.rps ?? 0));
+  const [rpm, setRpm] = useState(String(initial?.rpm ?? 0));
+  const [ctxK, setCtxK] = useState(String(initial?.ctx_k ?? 0));
+  const [priority, setPriority] = useState(String(initial?.poll_priority ?? 0));
+  const [noPoll, setNoPoll] = useState(Boolean(initial?.no_poll));
+  const [streaming, setStreaming] = useState(initial?.streaming ?? true);
+  const [maxTokens, setMaxTokens] = useState(String(initial?.max_tokens ?? 0));
+  const [tokenField, setTokenField] = useState(String(initial?.token_field || 'max_tokens'));
+  const [thinkingType, setThinkingType] = useState(String(initial?.thinking_type || 'none'));
+  const [reasoningEffort, setReasoningEffort] = useState(String(initial?.reasoning_effort || 'none'));
   const [testing, setTesting] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [toast, setToast] = useState<{ text: string; kind: 'ok' | 'err' } | null>(null);
@@ -191,36 +106,29 @@ export const NewModelConfigPage: React.FC<NewModelConfigPageProps> = ({ onClose,
     }, 900);
   };
 
-  const submit = async () => {
-    const payload: NewModelConfigPayload = {
-      rps: toInt(rps),
-      rpm: toInt(rpm),
-      ctx_k: toInt(ctxK),
-      poll_priority: toInt(priority),
-      no_poll: noPoll,
-      streaming,
-      max_tokens: toInt(maxTokens),
-      token_field: tokenField,
-      thinking_type: thinkingType,
-      reasoning_effort: reasoningEffort,
-    };
-    if (payload.ctx_k > 1000) {
-      flash('上下文窗口最大 1000（即 1M）', 'err');
-      return;
-    }
+  const submit = () => {
+    if (!name.trim()) return flash('请填写名称', 'err');
+    if (!model.trim()) return flash('请填写模型', 'err');
+    const ctx = toInt(ctxK);
+    if (ctx > 1000) return flash('上下文窗口最大 1000（即 1M）', 'err');
     setSubmitting(true);
     try {
-      if (onSubmit) {
-        await onSubmit(payload);
-      } else {
-        const existing = JSON.parse(window.localStorage.getItem(CUSTOM_MODELS_KEY) || '[]');
-        existing.push(payload);
-        window.localStorage.setItem(CUSTOM_MODELS_KEY, JSON.stringify(existing));
-      }
-      flash('✅ 模型配置已创建', 'ok');
-      window.setTimeout(onClose, 700);
-    } catch (reason) {
-      flash(reason instanceof Error ? reason.message : String(reason), 'err');
+      onSubmit({
+        name: name.trim(),
+        format,
+        model: model.trim(),
+        api_key: apiKey.trim(),
+        rps: toInt(rps),
+        rpm: toInt(rpm),
+        ctx_k: ctx,
+        poll_priority: toInt(priority),
+        no_poll: noPoll,
+        streaming,
+        max_tokens: toInt(maxTokens),
+        token_field: tokenField,
+        thinking_type: thinkingType,
+        reasoning_effort: reasoningEffort,
+      });
     } finally {
       setSubmitting(false);
     }
@@ -228,38 +136,9 @@ export const NewModelConfigPage: React.FC<NewModelConfigPageProps> = ({ onClose,
 
   const switchBox = (checked: boolean, onChange: (next: boolean) => void, id: string) => (
     <label htmlFor={id} style={{ position: 'relative', width: 42, height: 24, flexShrink: 0, display: 'inline-block' }}>
-      <input
-        id={id}
-        type="checkbox"
-        checked={checked}
-        onChange={(event) => onChange(event.target.checked)}
-        style={{ opacity: 0, width: 0, height: 0, position: 'absolute' }}
-      />
-      <span
-        aria-hidden="true"
-        style={{
-          position: 'absolute',
-          inset: 0,
-          borderRadius: 12,
-          background: checked ? '#18181b' : '#e5e7eb',
-          transition: 'background .2s',
-          cursor: 'pointer',
-        }}
-      >
-        <span
-          style={{
-            position: 'absolute',
-            left: 3,
-            top: 3,
-            width: 18,
-            height: 18,
-            borderRadius: '50%',
-            background: '#fff',
-            boxShadow: '0 1px 3px rgba(0,0,0,.18)',
-            transition: 'transform .2s',
-            transform: checked ? 'translateX(18px)' : 'none',
-          }}
-        />
+      <input id={id} type="checkbox" checked={checked} onChange={(e) => onChange(e.target.checked)} style={{ opacity: 0, width: 0, height: 0, position: 'absolute' }} />
+      <span aria-hidden="true" style={{ position: 'absolute', inset: 0, borderRadius: 12, background: checked ? '#18181b' : '#e5e7eb', transition: 'background .2s', cursor: 'pointer' }}>
+        <span style={{ position: 'absolute', left: 3, top: 3, width: 18, height: 18, borderRadius: '50%', background: '#fff', boxShadow: '0 1px 3px rgba(0,0,0,.18)', transition: 'transform .2s', transform: checked ? 'translateX(18px)' : 'none' }} />
       </span>
     </label>
   );
@@ -267,13 +146,38 @@ export const NewModelConfigPage: React.FC<NewModelConfigPageProps> = ({ onClose,
   return (
     <div style={styles.overlay}>
       <div style={styles.header}>
-        <h1 style={styles.title}>新建模型配置</h1>
+        <h1 style={styles.title}>{initial ? '编辑模型配置' : '新建模型配置'}</h1>
         <button type="button" style={styles.close} aria-label="关闭" onClick={onClose}>×</button>
       </div>
       <p style={styles.sub}>新建后不会自动激活，请在卡片上「设为激活」以启用。</p>
 
       <div style={styles.body}>
-        {/* 一、访问频率限制 */}
+        <div style={styles.row2}>
+          <div style={{ ...styles.field, marginBottom: 0 }}>
+            <label style={styles.label} htmlFor="nm-name">名称</label>
+            <input id="nm-name" type="text" style={styles.input} placeholder="例如: 雲頂天宮" value={name} onChange={(e) => setName(e.target.value)} />
+          </div>
+          <div style={{ ...styles.field, marginBottom: 0 }}>
+            <label style={styles.label} htmlFor="nm-format">格式</label>
+            <select id="nm-format" style={styles.input} value={format} onChange={(e) => setFormat(e.target.value)}>
+              <option value="Anthropic">Anthropic</option>
+              <option value="OpenAI">OpenAI</option>
+              <option value="Gemini">Gemini</option>
+              <option value="Custom">Custom</option>
+            </select>
+          </div>
+        </div>
+
+        <div style={styles.field}>
+          <label style={styles.label} htmlFor="nm-model">模型</label>
+          <input id="nm-model" type="text" style={styles.input} placeholder="例如: deepseek-v4-flash" value={model} onChange={(e) => setModel(e.target.value)} />
+        </div>
+
+        <div style={styles.field}>
+          <label style={styles.label} htmlFor="nm-key">API Key</label>
+          <input id="nm-key" type="password" style={styles.input} placeholder="sk-..." value={apiKey} onChange={(e) => setApiKey(e.target.value)} />
+        </div>
+
         <div style={styles.row3}>
           <div style={{ ...styles.field, marginBottom: 0 }}>
             <label style={styles.label} htmlFor="nm-rps">每秒限速</label>
@@ -292,7 +196,6 @@ export const NewModelConfigPage: React.FC<NewModelConfigPageProps> = ({ onClose,
           限速 0 = 不限。全 Agent 共享。上下文窗口单位 K（千 token），0 = 默认 200K，上限 1000（即 1M）；该值用于压缩阈值计算。
         </p>
 
-        {/* 二 / 三 / 四 */}
         <div style={styles.group}>
           <div style={{ ...styles.groupRow, borderTop: 'none', paddingTop: 0 }}>
             <div>
@@ -301,7 +204,6 @@ export const NewModelConfigPage: React.FC<NewModelConfigPageProps> = ({ onClose,
             </div>
             <input type="number" min={0} inputMode="numeric" style={styles.numInput} value={priority} onChange={(e) => setPriority(e.target.value)} />
           </div>
-
           <div style={styles.groupRow}>
             <div>
               <strong style={styles.groupInfoStrong}>不参与轮询</strong>
@@ -309,7 +211,6 @@ export const NewModelConfigPage: React.FC<NewModelConfigPageProps> = ({ onClose,
             </div>
             {switchBox(noPoll, setNoPoll, 'nm-no-poll')}
           </div>
-
           <div style={{ ...styles.groupRow, paddingBottom: 0 }}>
             <div>
               <strong style={styles.groupInfoStrong}>流式输出 · streaming</strong>
@@ -319,7 +220,6 @@ export const NewModelConfigPage: React.FC<NewModelConfigPageProps> = ({ onClose,
           </div>
         </div>
 
-        {/* 五 / 六 */}
         <div style={styles.group}>
           <div style={{ ...styles.groupRow, borderTop: 'none', paddingTop: 0 }}>
             <div>
@@ -328,7 +228,6 @@ export const NewModelConfigPage: React.FC<NewModelConfigPageProps> = ({ onClose,
             </div>
             <input type="number" min={0} inputMode="numeric" style={styles.numInput} value={maxTokens} onChange={(e) => setMaxTokens(e.target.value)} />
           </div>
-
           <div style={{ ...styles.groupRow, paddingBottom: 0 }}>
             <div>
               <strong style={styles.groupInfoStrong}>上限字段名</strong>
@@ -341,7 +240,6 @@ export const NewModelConfigPage: React.FC<NewModelConfigPageProps> = ({ onClose,
           </div>
         </div>
 
-        {/* 七 / 八 */}
         <div style={{ ...styles.group, marginBottom: 0 }}>
           <div style={{ ...styles.groupRow, borderTop: 'none', paddingTop: 0 }}>
             <div>
@@ -354,7 +252,6 @@ export const NewModelConfigPage: React.FC<NewModelConfigPageProps> = ({ onClose,
               <option value="enabled">enabled</option>
             </select>
           </div>
-
           <div style={{ ...styles.groupRow, paddingBottom: 0 }}>
             <div>
               <strong style={styles.groupInfoStrong}>思考强度 · reasoning_effort</strong>
@@ -371,19 +268,17 @@ export const NewModelConfigPage: React.FC<NewModelConfigPageProps> = ({ onClose,
       </div>
 
       <div style={styles.footer}>
-        <button type="button" style={{ ...styles.btnTest, opacity: testing ? 0.7 : 1 }} disabled={testing} onClick={runTest}>
+        <button type="button" style={styles.btnTest} disabled={testing} onClick={runTest}>
           {testing ? <LoaderCircle className="w-3.5 h-3.5 animate-spin" /> : <Link className="w-3.5 h-3.5" />}
           <span>{testing ? '测试中…' : '测试连接'}</span>
         </button>
         <button type="button" style={{ ...styles.btnCreate, opacity: submitting ? 0.6 : 1 }} disabled={submitting} onClick={submit}>
-          {submitting ? <LoaderCircle className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
-          <span>新建</span>
+          <Plus className="w-4 h-4" />
+          <span>{initial ? '保存' : '新建'}</span>
         </button>
       </div>
 
-      {toast && (
-        <div style={{ ...styles.toast, background: toast.kind === 'err' ? '#dc2626' : '#16a34a' }}>{toast.text}</div>
-      )}
+      {toast && <div style={{ ...styles.toast, background: toast.kind === 'err' ? '#dc2626' : '#16a34a' }}>{toast.text}</div>}
     </div>
   );
 };
