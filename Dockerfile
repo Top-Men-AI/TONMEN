@@ -37,9 +37,17 @@ RUN apt-get update \
 WORKDIR /app
 COPY . /app
 
+# Install Node.js
+RUN curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
+    && apt-get install -y nodejs \
+    && rm -rf /var/lib/apt/lists/*
+
 RUN pip install --no-cache-dir . \
-    && tonmen --config /app/tonmen.toml.example doctor || true
+    && npm install \
+    && npm run build
 
-EXPOSE 8888
+ENV PORT=3000
+EXPOSE 3000
 
-CMD ["tonmen", "console", "--no-open"]
+CMD ["node", "dist/server.js"]
+
