@@ -18,6 +18,7 @@ import {
   Flame,
   Code,
   AlertTriangle,
+  FolderCode,
 } from 'lucide-react';
 import rawSkillsData from '../skills_data.json';
 
@@ -36,54 +37,74 @@ interface SkillItem {
   content_preview?: string;
 }
 
+// Extract categories dynamically from skills_data.json
+const rawCategories = (rawSkillsData as any).categories || {};
 const CATEGORY_MAP: Record<string, { en: string; icon: string; desc: string }> = {
   '全部': { en: 'all', icon: '⚔️', desc: '全量 181 项网络战斗实战技能武器' },
-  'Linux提权类': { en: 'linux-privesc', icon: '🐧', desc: 'Linux 内核、SUID、Sudo、容器逃逸与提权链' },
-  'Web攻击类': { en: 'web-attack', icon: '🌐', desc: 'SQL注入、XSS、SSRF、CSRF、逻辑漏洞与认证绕过' },
-  'Windows-AD攻击类': { en: 'windows-ad', icon: '🪟', desc: 'Active Directory、Kerberos、域横向移动与哈希传递' },
-  '云平台攻击类': { en: 'cloud-security', icon: '☁️', desc: 'AWS、Azure、GCP、IAM 权限提升与元数据渗透' },
-  '免杀规避类': { en: 'evasion', icon: '🥷', desc: 'EDR/沙箱规避、内存加载、混淆与白名单利用' },
-  '利用类-漏洞利用': { en: 'exploit', icon: '💥', desc: '二进制漏洞利用、ROP链构造、Webshell与内存马' },
-  '探测类-侦察信息收集': { en: 'recon', icon: '🔍', desc: '资产发现、端口扫描、子域名与指纹识别' },
-  '数据渗出类': { en: 'exfil', icon: '📤', desc: 'DNS信道、ICMP隧道、加密渗出与隐蔽传输' },
-  '辅助类-工程与提效': { en: 'devops', icon: '⚙️', desc: '自动化编排、代理池管理与武器库快速流水线' },
-  '辅助类-智能体协作': { en: 'agentic', icon: '🤖', desc: '多智能体协同、状态共享与自适应提示词工程' },
-  '辅助类-逆向工程': { en: 'reverse', icon: '🔬', desc: '反编译、动态调试、混淆脱壳与符号恢复' },
-  '辅助类-隐蔽通信': { en: 'c2', icon: '📡', desc: 'C2通信协议、自定义流量伪装与域前置' },
-  '防御规避类': { en: 'defense-evasion', icon: '🛡️', desc: '日志清除、行为伪装与反取证对抗' },
-  '密码学攻击': { en: 'crypto', icon: '🔐', desc: '弱加密破解、Padding Oracle与秘钥恢复' },
-  '移动安全': { en: 'mobile', icon: '📱', desc: 'Android/iOS 应用反编译、Frida Hook 与漏洞分析' },
-  '容器与K8s安全': { en: 'container', icon: '📦', desc: 'Docker/K8s 容器逃逸、RBAC 提权与集群渗透' },
-  'AI安全与对抗': { en: 'ai-sec', icon: '🧠', desc: 'Prompt 注入、模型越狱与 Agent 投毒防御' },
+  ...rawCategories,
 };
 
-// Flatten skills from json
+// Flatten skills from json root array
 function parseSkills(): SkillItem[] {
-  const result: SkillItem[] = [];
   const raw = rawSkillsData as any;
-  if (!raw || !raw.categories) return [];
+  if (!raw) return [];
+  const list = Array.isArray(raw.skills) ? raw.skills : [];
+  
+  return list.map((skill: any, index: number) => {
+    const scriptsList = Array.isArray(skill.scripts)
+      ? skill.scripts.map((s: any) => (typeof s === 'string' ? s : s.filename || 'script.py'))
+      : ['script.py'];
 
-  Object.entries(raw.categories).forEach(([catName, catData]: [string, any]) => {
-    const list = Array.isArray(catData.skills) ? catData.skills : [];
-    list.forEach((skill: any, index: number) => {
-      result.push({
-        id: skill.id || `${catData.en || 'skill'}-${index}`,
-        name: skill.name || '未命名技能',
-        category: catName,
-        category_en: catData.en,
-        icon: catData.icon || '⚔️',
-        desc: skill.desc || catData.desc || '网络安全实战自动化执行技能',
-        path: skill.path || '',
-        script_count: skill.script_count || (skill.scripts ? skill.scripts.length : 1),
-        tags: skill.tags || [catName, catData.en || 'security'],
-        scripts: skill.scripts || ['main.py', 'exploit.sh', 'recon.sh'],
-        risk: skill.risk || (catName.includes('利用') ? 'HIGH' : catName.includes('提权') ? 'CRITICAL' : 'MEDIUM'),
-        content_preview: skill.content_preview || `# 自动化执行脚本: ${skill.name}\nimport sys\n# 技能装配完成，随时接受策略官调度\ndef run():\n    print("[+] 技能启动: ${skill.name}")\n`,
-      });
-    });
+    const riskLevel = skill.category?.includes('利用')
+      ? 'HIGH'
+      : skill.category?.includes('提权')
+      ? 'CRITICAL'
+      : skill.category?.includes('免杀')
+      ? 'HIGH'
+      : skill.category?.includes('云平台')
+      ? 'HIGH'
+      : 'MEDIUM';
+
+    return {
+      id: skill.id || `skill-${index}`,
+      name: skill.name || '未命名技能',
+      category: skill.category || '未分类',
+      category_en: skill.category_en,
+      icon: skill.category_icon || rawCategories[skill.category]?.icon || '⚔️',
+      desc: skill.description || rawCategories[skill.category]?.desc || '网络安全实战自动化执行技能',
+      path: skill.path || '',
+      script_count: scriptsList.length,
+      tags: skill.trigger_words || [skill.category, skill.category_en || 'security'],
+      scripts: scriptsList,
+      risk: riskLevel,
+      content_preview: `# 实战技能自动化执行脚本: ${skill.name}
+# 所属分类: ${skill.category} (${skill.category_en || 'sec'})
+# 武器库物理路径: ${skill.path}
+# 包含脚本: ${scriptsList.join(', ')}
+
+import sys
+import os
+
+def run_exploit(target_host, options=None):
+    """
+    【${skill.name}】战术动作执行入口
+    已装备至天宫战术决策引擎，支持策略官(Claude/GPT/DeepSeek)实时调度
+    """
+    print(f"[+] 正在向目标执行 ${skill.name}: {target_host}")
+    # 自动化探测与利用链逻辑
+    return {
+        "status": "SUCCESS",
+        "skill_id": "${skill.id}",
+        "executed_script": "${scriptsList[0] || 'script.py'}",
+        "evidence": "Exploit sequence executed cleanly"
+    }
+
+if __name__ == "__main__":
+    target = sys.argv[1] if len(sys.argv) > 1 else "127.0.0.1"
+    run_exploit(target)
+`,
+    };
   });
-
-  return result;
 }
 
 export const SkillsView: React.FC<{
@@ -93,9 +114,9 @@ export const SkillsView: React.FC<{
   const [selectedCategory, setSelectedCategory] = useState('全部');
   const [selectedSkill, setSelectedSkill] = useState<SkillItem | null>(null);
   const [equippedSkills, setEquippedSkills] = useState<Record<string, string[]>>({
-    claude: ['Linux提权类-自动化提权检查', 'Web攻击类-SQL注入自动化探测', 'Windows-AD攻击类-Kerberoasting攻击'],
-    gpt: ['探测类-侦察信息收集-资产发现综合脚本', '云平台攻击类-AWS元数据渗出'],
-    deepseek: ['免杀规避类-EDR白名单绕过', '利用类-漏洞利用-内存马注入'],
+    claude: ['Capabilities与特殊权限', 'Sudo与SUID提权', 'Kerberos攻击', 'SQL注入全自动挖掘'],
+    gpt: ['Docker与容器逃逸', 'AWS元数据渗透与提权', '子域名深度枚举爆破'],
+    deepseek: ['EDR白名单绕过', '内存马无文件注入', 'Linux内核提权自动化'],
   });
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
@@ -109,7 +130,8 @@ export const SkillsView: React.FC<{
         !search ||
         s.name.toLowerCase().includes(search.toLowerCase()) ||
         s.desc?.toLowerCase().includes(search.toLowerCase()) ||
-        s.category.toLowerCase().includes(search.toLowerCase());
+        s.category.toLowerCase().includes(search.toLowerCase()) ||
+        (s.category_en && s.category_en.toLowerCase().includes(search.toLowerCase()));
       return matchCat && matchSearch;
     });
   }, [allSkills, selectedCategory, search]);
@@ -161,7 +183,7 @@ export const SkillsView: React.FC<{
                   {allSkills.length} SKILLS
                 </span>
                 <span className="px-2 py-0.5 rounded-md bg-cyan-500/20 text-cyan-300 border border-cyan-500/30 text-xs font-mono font-bold">
-                  17 分类
+                  {Object.keys(CATEGORY_MAP).length - 1} 分类
                 </span>
               </div>
               <p className="text-xs text-slate-400 mt-0.5">
@@ -193,7 +215,7 @@ export const SkillsView: React.FC<{
       </div>
 
       {/* Category Pills */}
-      <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-thin">
+      <div className="flex items-center gap-2 overflow-x-auto pb-1.5 scrollbar-thin">
         {Object.entries(CATEGORY_MAP).map(([catName, catInfo]) => {
           const active = selectedCategory === catName;
           const count = catName === '全部' ? allSkills.length : allSkills.filter((s) => s.category === catName).length;
@@ -207,7 +229,7 @@ export const SkillsView: React.FC<{
                   : 'bg-slate-900/70 text-slate-400 border-slate-800 hover:bg-slate-800/80 hover:text-slate-200'
               }`}
             >
-              <span>{catInfo.icon}</span>
+              <span>{catInfo.icon || '⚔️'}</span>
               <span>{catName}</span>
               <span className={`text-[10px] font-mono px-1 rounded ${active ? 'bg-amber-500/30 text-amber-200' : 'bg-slate-800 text-slate-500'}`}>
                 {count}
@@ -234,7 +256,7 @@ export const SkillsView: React.FC<{
                 <div className="flex items-start justify-between gap-2 mb-2.5">
                   <div className="flex items-center gap-2">
                     <span className="text-lg p-1.5 rounded-lg bg-slate-800 border border-slate-700/60">
-                      {catInfo.icon}
+                      {skill.icon || catInfo.icon || '⚔️'}
                     </span>
                     <div>
                       <h3 className="text-sm font-bold text-slate-100 group-hover:text-amber-300 transition-colors line-clamp-1">
@@ -287,7 +309,7 @@ export const SkillsView: React.FC<{
                   className="px-2.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white text-xs font-medium flex items-center gap-1 transition-colors"
                 >
                   <Code className="w-3.5 h-3.5 text-slate-400" />
-                  详情脚本
+                  详情脚本 ({skill.script_count}个)
                 </button>
 
                 <div className="flex items-center gap-1">
@@ -326,12 +348,12 @@ export const SkillsView: React.FC<{
             <div className="flex items-start justify-between gap-4 border-b border-slate-800 pb-3">
               <div className="flex items-center gap-3">
                 <span className="text-2xl p-2 rounded-xl bg-slate-800 border border-slate-700">
-                  {CATEGORY_MAP[selectedSkill.category]?.icon || '⚔️'}
+                  {selectedSkill.icon || CATEGORY_MAP[selectedSkill.category]?.icon || '⚔️'}
                 </span>
                 <div>
                   <h2 className="text-lg font-bold text-white">{selectedSkill.name}</h2>
                   <p className="text-xs text-slate-400 font-mono">
-                    分类: {selectedSkill.category} ({selectedSkill.category_en})
+                    分类: {selectedSkill.category} ({selectedSkill.category_en}) · 脚本数: {selectedSkill.script_count}
                   </p>
                 </div>
               </div>
@@ -367,7 +389,7 @@ export const SkillsView: React.FC<{
                   </button>
                 </div>
                 <pre className="p-3.5 rounded-xl bg-slate-950 border border-slate-800 text-xs font-mono text-emerald-400 overflow-x-auto">
-                  {selectedSkill.content_preview || `# 技能: ${selectedSkill.name}\n# 路径: ${selectedSkill.path}\n# 已加载至天宫武器注册表`}
+                  {selectedSkill.content_preview}
                 </pre>
               </div>
 
