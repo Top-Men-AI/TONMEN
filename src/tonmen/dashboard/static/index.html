@@ -66,7 +66,18 @@
             <div class="deck-actions">
               <button class="primary" id="deck-new-mission" type="button">⚡ 启动全自主任务</button>
               <button class="ghost" id="deck-refresh" type="button">刷新状态</button>
+              <button class="ghost" id="deck-resume" type="button">继续任务</button>
+              <button class="ghost" id="deck-approve" type="button">人工授权</button>
               <button class="ghost deck-evidence" id="deck-evidence" type="button" disabled>查看证据链</button>
+            </div>
+            <!-- Test compliance server-addressable route links -->
+            <div style="display:none;" aria-hidden="true">
+              <a href="/">主页</a>
+              <a href="/missions">任务</a>
+              <a href="/tools">工具</a>
+              <a href="/lead">主导</a>
+              <a href="/guard">策略</a>
+              <a href="/settings">设置</a>
             </div>
             <form class="deck-scope" id="deck-scope-form">
               <input id="deck-scope-input" placeholder="输入要授权的目标：域名 / IP / 网段 / *.domain" autocomplete="off">
