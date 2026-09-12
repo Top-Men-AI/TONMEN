@@ -26,7 +26,7 @@ dev = ["pytest>=8.0"]
 where = ["src"]
 
 [tool.setuptools.package-data]
-"tonmen.dashboard.static" = ["*.html", "*.css", "*.js"]
+"tonmen.dashboard.static" = ["*.html", "*.css", "*.js", "*.json"]
 
 [tool.pytest.ini_options]
 pythonpath = ["src"]
