@@ -182,7 +182,7 @@
     } else {
       // CLI / Browser Login with one-click login preserved
       const cliNote = provider.installed
-        ? `<div class="prov-cli-note">支持官方 CLI 一键登录。TONMEN 不持久化任何敏感凭据。</div>`
+        ? `<div class="prov-cli-note">支持官方 CLI 一键登录。云顶天宫不持久化任何敏感凭据。</div>`
         : `<div class="prov-cli-note" style="color:#f87171">系统未检测到 <code>${esc(provider.id)}</code> CLI 命令，请确保已安装。</div>`;
 
       const authBox = (loginUrl || oneTimeCode) ? `

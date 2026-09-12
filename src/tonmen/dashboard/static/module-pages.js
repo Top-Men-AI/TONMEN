@@ -140,6 +140,116 @@
     return `<div class="module-toolbar"><button class="primary" data-module-new>执行新任务</button><button class="ghost" data-module-refresh>刷新</button>${extra}</div>`;
   }
 
+  async function downloadMissionPdf(runId) {
+    if (!runId) return;
+    toast("正在生成任务 PDF 报告...");
+    try {
+      const [missionRes, reportRes] = await Promise.allSettled([
+        missionDetail(runId),
+        fetch(`/api/missions/${encodeURIComponent(runId)}/report`, {cache:"no-store"}).then(r => r.ok ? r.json() : null)
+      ]);
+      const mission = missionRes.status === "fulfilled" ? missionRes.value : null;
+      const report = reportRes.status === "fulfilled" ? reportRes.value : null;
+      if (!mission) throw new Error("无法加载任务详情");
+
+      const steps = mission.steps || [];
+      const evidence = mission.evidence || [];
+      const observations = mission.observations || [];
+
+      const stepsHtml = steps.length ? steps.map((s, i) => `
+        <div style="margin-bottom:12px; padding:10px; background:#f8fafc; border:1px solid #e2e8f0; border-radius:6px;">
+          <strong>Step ${i + 1}: ${esc(s.tool)}</strong> (${esc(s.target)})<br>
+          <span style="font-size:12px; color:#475569;">状态: ${esc(stateName(s.state))} | 风险: L${esc(s.risk || 1)}</span>
+          ${s.rationale ? `<div style="margin-top:4px; font-size:13px; color:#334155;">策略/理由: ${esc(s.rationale)}</div>` : ""}
+          ${s.error ? `<div style="margin-top:4px; font-size:13px; color:#dc2626;">错误: ${esc(s.error)}</div>` : ""}
+        </div>
+      `).join("") : `<p>暂无决策步骤记录</p>`;
+
+      const evidenceHtml = evidence.length ? evidence.map(e => `
+        <div style="margin-bottom:12px; border:1px solid #cbd5e1; border-radius:6px; overflow:hidden;">
+          <div style="background:#f1f5f9; padding:8px 12px; font-size:13px; font-weight:600; display:flex; justify-content:space-between;">
+            <span>Tool: ${esc(e.tool)} (${short(e.id)})</span>
+            <span>Exit Code: ${e.exit_code}</span>
+          </div>
+          <div style="padding:8px 12px; font-family:monospace; font-size:12px; background:#0f172a; color:#e2e8f0; overflow-x:auto;">
+            <div>$ ${(e.argv || []).join(" ")}</div>
+            <div style="margin-top:6px; color:#93c5fd;">STDOUT:\n${esc(e.stdout || "(空)")}</div>
+            ${e.stderr ? `<div style="margin-top:6px; color:#fca5a5;">STDERR:\n${esc(e.stderr)}</div>` : ""}
+          </div>
+        </div>
+      `).join("") : `<p>暂无关键证据输出</p>`;
+
+      const observationsHtml = observations.length ? observations.map(o => `
+        <div style="margin-bottom:8px; padding:8px 12px; background:#f0fdf4; border:1px solid #bbf7d0; border-radius:6px; font-size:13px; color:#166534;">
+          <strong>[${esc(o.captured_at || "")}]</strong> ${esc(o.summary)}
+        </div>
+      `).join("") : `<p>暂无最终执行观测结果</p>`;
+
+      const win = window.open("", "_blank");
+      if (!win) {
+        throw new Error("浏览器拦截了弹出窗口，请允许弹出窗口后重试");
+      }
+
+      win.document.write(`
+        <!DOCTYPE html>
+        <html lang="zh-CN">
+        <head>
+          <meta charset="utf-8">
+          <title>云顶天宫 - 任务执行报告 (${esc(runId)})</title>
+          <style>
+            body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; color: #1e293b; margin: 0; padding: 24px; line-height: 1.5; background: #fff; }
+            h1 { font-size: 22px; border-bottom: 2px solid #0284c7; padding-bottom: 8px; margin-bottom: 16px; color: #0f172a; }
+            h2 { font-size: 16px; margin-top: 24px; margin-bottom: 12px; color: #0369a1; border-left: 4px solid #0284c7; padding-left: 8px; }
+            .meta-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; background: #f8fafc; padding: 12px; border-radius: 8px; border: 1px solid #e2e8f0; margin-bottom: 20px; font-size: 14px; }
+            .meta-item span { color: #64748b; font-size: 12px; display: block; }
+            .meta-item strong { color: #0f172a; font-size: 14px; }
+            @media print {
+              body { padding: 0; }
+              button { display: none !important; }
+            }
+          </style>
+        </head>
+        <body>
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px;">
+            <div>
+              <h1 style="margin:0;">云顶天宫安全运行时 - 任务执行报告</h1>
+              <p style="margin:4px 0 0; color:#64748b; font-size:13px;">Autonomous Security Runtime Mission Audit Report</p>
+            </div>
+            <button onclick="window.print()" style="background:#0284c7; color:#fff; border:none; padding:8px 16px; border-radius:6px; font-size:14px; cursor:pointer; font-weight:600;">打印 / 保存为 PDF</button>
+          </div>
+
+          <div class="meta-grid">
+            <div class="meta-item"><span>任务编号 (Mission ID)</span><strong>${esc(mission.id)}</strong></div>
+            <div class="meta-item"><span>目标 (Target)</span><strong>${esc(mission.target)}</strong></div>
+            <div class="meta-item"><span>执行状态 (State)</span><strong>${esc(stateName(mission.state))}</strong></div>
+            <div class="meta-item"><span>开始时间 (Started At)</span><strong>${esc(fmt(mission.started_at))}</strong></div>
+          </div>
+
+          <h2>1. 任务决策链路 (Decision Chain & Steps)</h2>
+          ${stepsHtml}
+
+          <h2>2. 关键证据链 (Key Evidence & Tool Output)</h2>
+          ${evidenceHtml}
+
+          <h2>3. 最终执行结果与观测 (Final Execution Results & Observations)</h2>
+          ${observationsHtml}
+
+          <div style="margin-top:40px; border-top:1px solid #e2e8f0; padding-top:12px; text-align:center; font-size:12px; color:#94a3b8;">
+            云顶天宫安全运行时控制台 · 自动生成于 ${new Date().toLocaleString()}
+          </div>
+          <script>
+            setTimeout(() => { window.print(); }, 400);
+          </script>
+        </body>
+        </html>
+      `);
+      win.document.close();
+      toast("PDF 报告生成窗口已打开");
+    } catch (e) {
+      toast(e.message || String(e), true);
+    }
+  }
+
   async function renderMissions() {
     const route = "/missions";
     const list = await missionList();
@@ -148,9 +258,22 @@
     if (selected && !list.some(item => item.id === selected)) selected = list[0]?.id || null;
     pageState.selectedRun = selected;
     const detail = selected ? await missionDetail(selected) : null;
-    const rows = list.map(item => `<tr class="selectable ${item.id === selected ? "selected" : ""}" data-select-run="${esc(item.id)}"><td>${esc(short(item.id))}</td><td>${esc(item.target)}</td><td><span class="module-badge ${stateTone(item.state)}">${esc(stateName(item.state))}</span></td><td>${esc(fmt(item.started_at))}</td></tr>`).join("");
-    const detailHtml = detail ? `<div class="detail-title"><div><strong>${esc(detail.target)}</strong><br><small>任务 ${esc(detail.id)}</small></div><span class="module-badge ${stateTone(detail.state)}">${esc(stateName(detail.state))}</span></div>${stepsBlock(detail)}<div style="height:10px"></div><div class="module-card"><div class="module-card-head"><h2>执行内容</h2></div><div class="module-card-body">${evidenceBlock(detail.evidence)}</div></div>` : `<div class="module-empty"><b>尚无任务</b>请先在总览页执行任务。</div>`;
-    const changed = setPage(route, `${stats(list)}<div style="height:10px"></div><div class="module-grid two"><section class="module-card"><div class="module-card-head"><h2>任务列表</h2><small>${list.length} 个</small></div><div class="module-table-wrap"><table class="module-table"><thead><tr><th>编号</th><th>目标</th><th>状态</th><th>开始时间</th></tr></thead><tbody>${rows || `<tr><td colspan="4">暂无任务</td></tr>`}</tbody></table></div></section><section class="module-card"><div class="module-card-head"><h2>任务详情</h2></div><div class="module-card-body">${detailHtml}</div></section></div>`, actionToolbar(detail?.state === "running" ? `<button class="primary" data-resume-run="${esc(detail.id)}">续行</button>` : detail?.state === "waiting_approval" ? `<button class="danger" data-approve-run="${esc(detail.id)}">批准当前步骤</button>` : detail?.state === "failed" ? `<button class="primary" data-retry-target="${esc(detail.target)}">重新执行</button>` : ""));
+    const rows = list.map(item => `<tr class="selectable ${item.id === selected ? "selected" : ""}" data-select-run="${esc(item.id)}"><td>${esc(short(item.id))}</td><td>${esc(item.target)}</td><td><span class="module-badge ${stateTone(item.state)}">${esc(stateName(item.state))}</span></td><td>${esc(fmt(item.started_at))}</td><td><button type="button" class="ghost small" data-download-pdf="${esc(item.id)}" title="下载包含决策链路、关键证据与最终结果的 PDF 报告">下载 PDF 报告</button></td></tr>`).join("");
+    const detailHtml = detail ? `
+      <div class="module-card" style="margin-bottom: 12px; border-color: #38bdf8;">
+        <div class="module-card-head">
+          <h2>🧭 中途方向提示与实时干预 (Agent Prompt Steering)</h2>
+          <small>在中途向此 LLM 任务代理实时注入策略导向、绕过技巧或攻击方向调整</small>
+        </div>
+        <div class="module-card-body" style="display: flex; flex-direction: column; gap: 8px;">
+          <textarea id="mission-steering-input" rows="2" placeholder="输入中途方向提示，例如：&#10;1. 优先使用代理轮换绕过WAF限速&#10;2. 重点对目标 /api/v1/auth 进行盲打注入测验" style="padding: 8px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 12px; background: #0f172a; color: #e2e8f0;"></textarea>
+          <div>
+            <button type="button" class="primary small" data-inject-mission-prompt="${esc(detail.id)}">🎯 发送方向提示给此任务代理</button>
+          </div>
+        </div>
+      </div>
+      <div class="detail-title"><div><strong>${esc(detail.target)}</strong><br><small>任务 ${esc(detail.id)}</small></div><span class="module-badge ${stateTone(detail.state)}">${esc(stateName(detail.state))}</span></div>${stepsBlock(detail)}<div style="height:10px"></div><div class="module-card"><div class="module-card-head"><h2>执行内容</h2></div><div class="module-card-body">${evidenceBlock(detail.evidence)}</div></div>` : `<div class="module-empty"><b>尚无任务</b>请先在总览页执行任务。</div>`;
+    const changed = setPage(route, `${stats(list)}<div style="height:10px"></div><div class="module-grid two"><section class="module-card"><div class="module-card-head"><h2>任务列表</h2><small>${list.length} 个</small></div><div class="module-table-wrap"><table class="module-table"><thead><tr><th>编号</th><th>目标</th><th>状态</th><th>开始时间</th><th>操作</th></tr></thead><tbody>${rows || `<tr><td colspan="5">暂无任务</td></tr>`}</tbody></table></div></section><section class="module-card"><div class="module-card-head"><h2>任务详情</h2></div><div class="module-card-body">${detailHtml}</div></section></div>`, actionToolbar(detail?.state === "running" ? `<button class="primary" data-resume-run="${esc(detail.id)}">续行</button>` : detail?.state === "waiting_approval" ? `<button class="danger" data-approve-run="${esc(detail.id)}">批准当前步骤</button>` : detail?.state === "failed" ? `<button class="primary" data-retry-target="${esc(detail.target)}">重新执行</button>` : ""));
     if (changed) bindMissionSelection();
   }
 
@@ -222,12 +345,12 @@
         overview.classList.remove("module-hidden");
         root.classList.remove("active");
         root.innerHTML = "";
-        document.title = "雲頂天宮 | TONMEN 控制台";
+        document.title = "雲頂天宮 | 云顶天宫控制台";
         return;
       }
       overview.classList.add("module-hidden");
       root.classList.add("active");
-      document.title = `${(titles[route] || ["页面"])[0]} | TONMEN 控制台`;
+      document.title = `${(titles[route] || ["页面"])[0]} | 云顶天宫控制台`;
       if (!force) loading(route);
       try {
         await (renderers[route] || renderMissions)();
@@ -254,6 +377,34 @@
       pageState.selectedRun = row.dataset.selectRun;
       history.replaceState({}, "", `/missions?run=${encodeURIComponent(pageState.selectedRun)}`);
       renderRoute();
+    }));
+    root.querySelectorAll("[data-download-pdf]").forEach(btn => btn.addEventListener("click", async (e) => {
+      e.stopPropagation();
+      const runId = btn.dataset.downloadPdf;
+      await downloadMissionPdf(runId);
+    }));
+    root.querySelectorAll("[data-inject-mission-prompt]").forEach(btn => btn.addEventListener("click", async () => {
+      const runId = btn.dataset.injectMissionPrompt;
+      const textarea = document.getElementById("mission-steering-input");
+      const prompt_direction = textarea ? textarea.value.trim() : "";
+      if (!prompt_direction) {
+        toast("请先输入方向提示内容", true);
+        return;
+      }
+      try {
+        pageState.busy = true;
+        toast("正在注入中途方向提示...");
+        await api(`/api/missions/${encodeURIComponent(runId)}/inject-prompt`, {
+          method: "POST",
+          body: { prompt_direction }
+        });
+        toast("成功向 LLM 任务注入方向提示！代理已动态调整策略。");
+        await renderRoute(true);
+      } catch (err) {
+        toast(err.message || String(err), true);
+      } finally {
+        pageState.busy = false;
+      }
     }));
   }
 
